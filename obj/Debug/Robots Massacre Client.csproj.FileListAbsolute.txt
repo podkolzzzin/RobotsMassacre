@@ -1,0 +1,63 @@
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.csprojResolveAssemblyReference.cache
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.csproj.GenerateResource.Cache
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.csprojResolveAssemblyReference.cache
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.csproj.GenerateResource.Cache
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+D:\dev\Shared\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+G:\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+G:\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+G:\Robots Massacre\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+G:\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+G:\Robots Massacre\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+G:\Robots Massacre\Robots Massacre Client\obj\Debug\ResolveAssemblyReference.cache
+G:\Robots Massacre\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+G:\Robots Massacre\Robots Massacre Client\obj\Debug\GenerateResource.read.1.tlog
+G:\Robots Massacre\Robots Massacre Client\obj\Debug\GenerateResource.write.1.tlog
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\obj\Debug\Robots Massacre Client.csprojResolveAssemblyReference.cache
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\obj\Debug\Robots Massacre Client.csproj.GenerateResource.Cache
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+C:\Users\MyUser\Dropbox\Robots Massacre\Robots MassacreАЧтоЕсли\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+d:\dev\Shared\Dropbox\Robots Massacre\Trunk\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+d:\dev\Shared\Dropbox\Robots Massacre\Trunk\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+d:\dev\Shared\Dropbox\Robots Massacre\Trunk\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+d:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+d:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+d:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.csproj.GenerateResource.Cache
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+D:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+D:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+D:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+D:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.csproj.GenerateResource.Cache
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe.config
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.exe
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.pdb
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.exe
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\bin\Debug\Robots Massacre Client.pdb
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\obj\Debug\ResolveAssemblyReference.cache
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\obj\Debug\Robots_Massacre_Client.Properties.Resources.resources
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\obj\Debug\GenerateResource.read.1.tlog
+G:\MUSIC\Master branch\Master branch\Robots Massacre Client\obj\Debug\GenerateResource.write.1.tlog
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\UpdateModule.dll
+D:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\bin\Debug\UpdateModule.dll
+D:\dev\Shared\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.csprojResolveAssemblyReference.cache
+C:\Users\MyUser\Dropbox\Robots Massacre\Master branch\Robots Massacre Client\obj\Debug\Robots Massacre Client.csprojResolveAssemblyReference.cache

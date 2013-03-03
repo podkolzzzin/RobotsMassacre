@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<OptionList xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ScreenWidth>800</ScreenWidth>
+  <ScreenHeight>600</ScreenHeight>
+  <Name>CAESAR</Name>
+  <StatsKills>0</StatsKills>
+  <StatsDeaths>0</StatsDeaths>
+  <StatsTimePlayed>23159297500723</StatsTimePlayed>
+  <StatsGamesPlayed>0</StatsGamesPlayed>
+  <IntStatsShots>13</IntStatsShots>
+  <IntStatsHits>0</IntStatsHits>
+  <StatsAccuracy>0</StatsAccuracy>
+</OptionList>
