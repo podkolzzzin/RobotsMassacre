@@ -48,6 +48,7 @@ namespace Robots_Massacre_Client
 
 		public void Load()
 		{
+			Directory.CreateDirectory(Path.GetDirectoryName(SETTINGS_FILE));
 			FileStream fs = new FileStream(SETTINGS_FILE, FileMode.OpenOrCreate, FileAccess.Read);
 
 			if (fs.Length > 0)
@@ -63,6 +64,7 @@ namespace Robots_Massacre_Client
 		{
 			Precompute();
 
+			Directory.CreateDirectory(Path.GetDirectoryName(SETTINGS_FILE));
 			FileStream fs = new FileStream(SETTINGS_FILE, FileMode.OpenOrCreate, FileAccess.Write);
 			XmlSerializer serializer = new XmlSerializer(typeof(OptionList));
 			serializer.Serialize(fs, List);
