@@ -16,6 +16,8 @@ namespace Gui
         public ComboBox _modeBox;
         public TextBox _searchBox;
         public SelectableGrid _mapBox;
+        private bool _isLoading;
+        private bool _isLoaded;
         public MapWarehouseGuiScreen(InputHandler Input)
             : base(Input,true,true,true,false)
         {
@@ -46,14 +48,25 @@ namespace Gui
             _mapBox.SetBorder(3);
             _mapBox.SetItemDimension(150, 150);
 
-            ThreadPool.QueueUserWorkItem(_init);
         }
 
         private void _init(object state)
         {
-            var maps = MapWarehouse.Get(Level.Modes.Deathmatch);
-            _stuffMapBox(maps);
-            Controls.Add(_mapBox);            
+            try
+            {
+                var maps = MapWarehouse.Get(Level.Modes.Deathmatch);
+                _stuffMapBox(maps);
+                Controls.Add(_mapBox);
+                _isLoaded = true;
+            }
+            catch
+            {
+                _isLoaded = false;
+            }
+            finally
+            {
+                _isLoading = false;
+            }
         }
 
         private void _stuffMapBox(List<KeyValuePair<string, BinaryReader>> items)
@@ -67,6 +80,12 @@ namespace Gui
 
         public override void Update()
         {
+            if (!_isLoading && !_isLoaded)
+            {
+                _isLoading = true;
+                ThreadPool.QueueUserWorkItem(_init);
+            }
+
             if (Input.Tab.Clicked)
             {
                 if (_modeBox.IsFocused)
