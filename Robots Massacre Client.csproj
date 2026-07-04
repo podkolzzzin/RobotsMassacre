@@ -216,6 +216,9 @@
     <Content Include="Resources\Audio\BrickHit.wav" />
     <Content Include="Resources\Audio\MetalHit.wav" />
     <Content Include="Resources\Audio\Shoot.wav" />
+    <Content Include="levels\**\*.rmm">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.8">
