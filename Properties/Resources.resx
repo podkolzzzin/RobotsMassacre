@@ -133,27 +133,6 @@
   <data name="GraphicsBig" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\Art\GraphicsBig.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="Level_00" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_00.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Level_01" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_01.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Level_02" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_02.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Level_03" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_03.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Level_04" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_04.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Level_05" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_05.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Level_06" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Levels\Level_06.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
   <data name="MetalHit" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\Audio\MetalHit.wav;System.IO.MemoryStream, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </data>
