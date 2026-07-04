@@ -10,6 +10,8 @@ namespace Level
 {
 	public class LevelManager
 	{
+		private const string DefaultLevelName = "default.rmm";
+
 		public string GetDirByMode(Modes mode)
 		{
 			string p = "levels/";
@@ -21,7 +23,7 @@ namespace Level
 
 		public int GetLevelsAmount(Modes mode)
 		{
-			return Directory.GetFiles(GetDirByMode(mode)).Length;
+			return GetLevelFiles(mode).Length;
 		}
 
 		public int GetArbitraryLevelIndex(Modes mode)
@@ -31,7 +33,7 @@ namespace Level
 
 		public string GetLevelName(Modes mode, int num)
 		{
-			return Directory.GetFiles(GetDirByMode(mode))[num];
+			return GetLevelFiles(mode)[num];
 		}
 
 		public BinaryReader GetLevelStream(Modes mode, int num)
@@ -42,9 +44,61 @@ namespace Level
 
 		public string ParseName(Modes mode, string fullName)
 		{
-			string[] parts = fullName.Split('\\');
-			parts = parts[parts.Length - 1].Split('.');
-			return parts[0];
+			return Path.GetFileNameWithoutExtension(fullName);
+		}
+
+		private string[] GetLevelFiles(Modes mode)
+		{
+			string dir = GetDirByMode(mode);
+			Directory.CreateDirectory(dir);
+
+			string[] files = Directory.GetFiles(dir);
+			if (files.Length == 0)
+			{
+				CreateDefaultLevel(Path.Combine(dir, DefaultLevelName), mode);
+				files = Directory.GetFiles(dir);
+			}
+
+			return files;
+		}
+
+		private void CreateDefaultLevel(string fileName, Modes mode)
+		{
+			const int width = 32;
+			const int height = 24;
+
+			using (BinaryWriter writer = new BinaryWriter(File.Open(fileName, FileMode.Create, FileAccess.Write)))
+			{
+				writer.Write(width);
+				writer.Write(height);
+
+				for (int x = 0; x < width; ++x)
+				{
+					for (int y = 0; y < height; ++y)
+					{
+						writer.Write((byte)GetDefaultTile(mode, x, y, width, height));
+					}
+				}
+			}
+		}
+
+		private MapEntity GetDefaultTile(Modes mode, int x, int y, int width, int height)
+		{
+			if (x == 1 && y == 1) return MapEntity.RedSpawnerOnGrass;
+			if (x == width - 2 && y == height - 2) return MapEntity.BluSpawnerOnGrass;
+
+			if (mode == Modes.CaptureFlag)
+			{
+				if (x == 3 && y == 3) return MapEntity.RedFlagOnGrass;
+				if (x == width - 4 && y == height - 4) return MapEntity.BluFlagOnGrass;
+			}
+
+			if (x == 0 || y == 0 || x == width - 1 || y == height - 1)
+			{
+				return MapEntity.WallOnGrass;
+			}
+
+			return MapEntity.Grass;
 		}
 	}
 }
