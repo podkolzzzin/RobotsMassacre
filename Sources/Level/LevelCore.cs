@@ -297,14 +297,14 @@ namespace Level
 
 			screen.SetOffset(XScroll, YScroll);
 			Background.SetOffset(XScroll, YScroll);
-			screen.Blit(new GBitmap(Background.GetClippedImage()), XScroll, YScroll);
+			screen.BlitClipped(Background, XScroll, YScroll);
 
 			foreach (GEntity T in Tiles) if (InCameraFocus(T) && !T.IsStatic) { T.Render(screen); ++Rs; }
 
 			if (ShowGrid)
 			{
 				BuildingGrid.SetOffset(XScroll, YScroll);
-				screen.Blit(new GBitmap(BuildingGrid.GetClippedImage()), XScroll, YScroll);
+				screen.BlitClipped(BuildingGrid, XScroll, YScroll);
 			}
 
 			foreach (GEntity E in Entities) if (InCameraFocus(E) && !E.IsStatic) { E.Render(screen); ++Rs; }

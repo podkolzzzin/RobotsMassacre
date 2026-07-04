@@ -83,6 +83,25 @@ namespace Gfx
 			Blit(source.GetFullImage(), x, y);
 		}
 
+		public void BlitClipped(GBitmap source, int x, int y)
+		{
+			using (Graphics g = Graphics.FromImage(Pixels))
+			{
+				g.DrawImage(source.GetFullImage(),
+					new Rectangle(x, y, source.ScreenWidth, source.ScreenHeight),
+					new Rectangle(source.XOffset, source.YOffset, source.ScreenWidth, source.ScreenHeight),
+					GraphicsUnit.Pixel);
+			}
+		}
+
+		public void DrawClipped(Graphics g)
+		{
+			g.DrawImage(Pixels,
+				new Rectangle(0, 0, ScreenWidth, ScreenHeight),
+				new Rectangle(XOffset, YOffset, ScreenWidth, ScreenHeight),
+				GraphicsUnit.Pixel);
+		}
+
 		public Bitmap GetFullImage()
 		{
 			return Pixels;
@@ -150,7 +169,20 @@ namespace Gfx
 
 		public void Fill(int a, int r, int g, int b)
 		{
-			using (Graphics gr = Graphics.FromImage(Pixels)) gr.FillRectangle(new SolidBrush(Color.FromArgb(a, r, g, b)), 0, 0, Width, Height);
+			using (Graphics gr = Graphics.FromImage(Pixels))
+			using (SolidBrush brush = new SolidBrush(Color.FromArgb(a, r, g, b)))
+			{
+				gr.FillRectangle(brush, 0, 0, Width, Height);
+			}
+		}
+
+		public void FillViewport(int a, int r, int g, int b)
+		{
+			using (Graphics gr = Graphics.FromImage(Pixels))
+			using (SolidBrush brush = new SolidBrush(Color.FromArgb(a, r, g, b)))
+			{
+				gr.FillRectangle(brush, XOffset, YOffset, ScreenWidth, ScreenHeight);
+			}
 		}
 
 		public void DrawLine(Color col, int width, int xs, int ys, int xe, int ye)

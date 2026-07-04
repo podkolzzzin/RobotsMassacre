@@ -152,7 +152,7 @@ namespace Robots_Massacre_Client
 		private void Draw()
 		{
 			if (Screen == null) return;
-			if (!GetCurrentScreen().NonClearableScreen) Screen.Fill(255, 0, 0, 0);
+			if (!GetCurrentScreen().NonClearableScreen) Screen.FillViewport(255, 0, 0, 0);
 			GetCurrentScreen().Render(Screen);
 			Invalidate();
 		}
@@ -169,7 +169,7 @@ namespace Robots_Massacre_Client
 
 			e.Graphics.Clear(Color.Black);
 			((MapEditorGuiScreen)Screens[9]).Graphics = e.Graphics;
-			e.Graphics.DrawImageUnscaled(Screen.GetClippedImage(), Point.Empty);
+			Screen.DrawClipped(e.Graphics);
 		}
 
 		public static OptionList Gs
