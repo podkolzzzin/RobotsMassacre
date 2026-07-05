@@ -42,40 +42,19 @@ test('loads and renders the game canvas', async ({ page }) => {
   expect(nonBlackPixels).toBeGreaterThan(5000);
 });
 
-test('mouse clickable controls mimic keyboard movement and shooting', async ({ page }) => {
+test('desktop play keeps the canvas at 960x600 and hides touch controls', async ({ page }) => {
   await page.goto(playUrl('/?sound=off'));
-  await expect(page.locator('.touch-w')).toBeVisible();
-  await expect(page.locator('.touch-space')).toBeVisible();
-
-  const start = await page.evaluate(() => {
-    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; ammo: number }; bullets: Map<string, unknown> } }).game!;
-    game.localPlayer.x = 180;
-    game.localPlayer.y = 180;
-    game.localPlayer.ammo = 75;
-    game.bullets.clear();
-    return { x: game.localPlayer.x, y: game.localPlayer.y };
+  const layout = await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      touchLayer: getComputedStyle(document.querySelector('.touch-layer')!).display,
+    };
   });
-
-  await page.locator('.touch-d').dispatchEvent('pointerdown', { pointerId: 10, pointerType: 'mouse', bubbles: true, cancelable: true });
-  await page.waitForTimeout(180);
-  await page.locator('.touch-d').dispatchEvent('pointerup', { pointerId: 10, pointerType: 'mouse', bubbles: true, cancelable: true });
-
-  const moved = await page.evaluate(() => {
-    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
-    return { x: game.localPlayer.x, y: game.localPlayer.y, direction: game.localPlayer.direction };
-  });
-  expect(moved.x).toBeGreaterThan(start.x);
-  expect(moved.y).toBeCloseTo(start.y, 5);
-  expect(moved.direction).toBe(1);
-
-  await page.locator('.touch-space').dispatchEvent('pointerdown', { pointerId: 11, pointerType: 'mouse', bubbles: true, cancelable: true });
-  await page.waitForTimeout(120);
-  await page.locator('.touch-space').dispatchEvent('pointerup', { pointerId: 11, pointerType: 'mouse', bubbles: true, cancelable: true });
-
-  await expect.poll(async () => page.evaluate(() => {
-    const game = (window as Window & { game?: { localPlayer: { ammo: number }; bullets: Map<string, unknown>; soundEvents: () => string[] } }).game!;
-    return { bullets: game.bullets.size, ammo: game.localPlayer.ammo, sounds: game.soundEvents() };
-  })).toMatchObject({ bullets: 1, ammo: 74, sounds: ['shoot'] });
+  expect(layout.width).toBe(960);
+  expect(layout.height).toBe(600);
+  expect(layout.touchLayer).toBe('none');
 });
 
 test('hud renders original bottom bar icons and bitmap font', async ({ page }) => {

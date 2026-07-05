@@ -107,13 +107,16 @@ export class InputState {
 }
 
 export function mountPointerControls(input: InputState, root: HTMLElement = document.body): HTMLElement {
-  const existing = document.querySelector<HTMLElement>('.touch-controls');
+  const existing = document.querySelector<HTMLElement>('.touch-layer');
   if (existing) return existing;
 
+  const layer = document.createElement('div');
+  layer.className = 'touch-layer';
+  layer.setAttribute('aria-label', 'On-screen controls');
+
+  // Editor mode keeps a d-pad cluster: precise single-cell steps beat a joystick there.
   const controls = document.createElement('div');
   controls.className = 'touch-controls';
-  controls.setAttribute('aria-label', 'On-screen controls');
-
   const pad = document.createElement('div');
   pad.className = 'touch-pad';
   pad.append(
@@ -122,17 +125,91 @@ export function mountPointerControls(input: InputState, root: HTMLElement = docu
     controlButton('S', 'KeyS', input, 'touch-s'),
     controlButton('D', 'KeyD', input, 'touch-d'),
   );
-
   const actions = document.createElement('div');
   actions.className = 'touch-actions';
-  actions.append(
-    controlButton('ESC', 'Escape', input, 'touch-esc'),
-    controlButton('SPACE', 'Space', input, 'touch-space'),
-  );
-
+  actions.append(controlButton('SPACE', 'Space', input, 'touch-space'));
   controls.append(pad, actions);
-  root.append(controls);
-  return controls;
+
+  layer.append(controls, buildJoystick(input), controlButton('FIRE', 'Space', input, 'fire-button'), controlButton('ESC', 'Escape', input, 'esc-button'));
+  root.append(layer);
+  return layer;
+}
+
+// Floating virtual joystick: the base appears where the thumb lands on the left
+// side of the screen and the drag direction maps to the dominant movement axis.
+function buildJoystick(input: InputState): HTMLElement {
+  const zone = document.createElement('div');
+  zone.className = 'joy-zone';
+  zone.setAttribute('aria-label', 'Virtual joystick area');
+  const base = document.createElement('div');
+  base.className = 'joy-base';
+  const knob = document.createElement('div');
+  knob.className = 'joy-knob';
+  base.append(knob);
+  zone.append(base);
+
+  const MAX_RADIUS = 44;
+  const DEAD_ZONE = 12;
+  let activePointer: number | null = null;
+  let originX = 0;
+  let originY = 0;
+  let currentCode: string | null = null;
+
+  const setCode = (code: string | null) => {
+    if (code === currentCode) return;
+    if (currentCode) {
+      input.releaseVirtual(currentCode);
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: currentCode, bubbles: true }));
+    }
+    currentCode = code;
+    if (code) {
+      input.pressVirtual(code);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true }));
+    }
+  };
+
+  const update = (event: PointerEvent) => {
+    const dx = event.clientX - originX;
+    const dy = event.clientY - originY;
+    const length = Math.hypot(dx, dy);
+    const clamp = length > MAX_RADIUS ? MAX_RADIUS / length : 1;
+    knob.style.transform = `translate(${dx * clamp}px, ${dy * clamp}px)`;
+    if (length < DEAD_ZONE) setCode(null);
+    else if (Math.abs(dx) >= Math.abs(dy)) setCode(dx > 0 ? 'KeyD' : 'KeyA');
+    else setCode(dy > 0 ? 'KeyS' : 'KeyW');
+  };
+
+  const end = () => {
+    activePointer = null;
+    setCode(null);
+    base.classList.remove('is-active');
+  };
+
+  zone.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    activePointer = event.pointerId;
+    try {
+      zone.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic test events do not always register an active pointer.
+    }
+    originX = event.clientX;
+    originY = event.clientY;
+    base.style.left = `${event.clientX}px`;
+    base.style.top = `${event.clientY}px`;
+    base.classList.add('is-active');
+    update(event);
+  });
+  zone.addEventListener('pointermove', (event) => {
+    if (event.pointerId === activePointer) update(event);
+  });
+  zone.addEventListener('pointerup', (event) => {
+    if (event.pointerId === activePointer) end();
+  });
+  zone.addEventListener('pointercancel', end);
+  window.addEventListener('blur', end);
+  zone.addEventListener('contextmenu', (event) => event.preventDefault());
+  return zone;
 }
 
 function inventoryDigit(code: string): number | undefined {

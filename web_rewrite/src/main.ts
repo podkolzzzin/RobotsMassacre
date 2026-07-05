@@ -18,7 +18,7 @@ async function main(): Promise<void> {
 
   const params = new URLSearchParams(location.search);
   const settings = loadGameSettings();
-  if (settings.width && settings.height) resizeCanvas(canvas, settings.width, settings.height);
+  if (settings.width && settings.height && !isTouchLayout()) resizeCanvas(canvas, settings.width, settings.height);
   const levelPath = params.get('level') ?? '/levels/dm/open.rmm';
   const localBuffer = isLocalMapPath(levelPath) ? loadLocalMapByPath(levelPath) : undefined;
   const [assets, level] = await Promise.all([
@@ -61,8 +61,25 @@ async function main(): Promise<void> {
   if (room) multiplayer.connect(room, signal);
   registerServiceWorker(params);
 
+  // On touch layouts the canvas fills the screen; keep its logical resolution
+  // matched to the CSS size so pixels stay square and nothing is letterboxed.
+  const fitCanvas = () => {
+    if (!isTouchLayout()) return;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+  };
+  fitCanvas();
+  new ResizeObserver(fitCanvas).observe(canvas);
+  window.addEventListener('resize', fitCanvas);
+
   let lastTick = performance.now();
   function frame(now: number): void {
+    const inputMode = editorHost.active ? 'editor' : menu.active ? 'menu' : 'game';
+    if (document.body.dataset.inputMode !== inputMode) document.body.dataset.inputMode = inputMode;
     if (editorHost.active) {
       lastTick = now;
       editorHost.frame();
@@ -94,6 +111,10 @@ function registerServiceWorker(params: URLSearchParams): void {
   };
   if (document.readyState === 'complete') register();
   else window.addEventListener('load', register, { once: true });
+}
+
+function isTouchLayout(): boolean {
+  return matchMedia('(pointer: coarse)').matches || innerWidth <= 820 || innerHeight <= 520;
 }
 
 void main();

@@ -147,7 +147,7 @@ export class MainMenu {
       return;
     }
     if (this.screen === 'level') {
-      const index = gridIndexAt(x, y, GRID_ITEM_SIZE + 20 + GRID_MARGIN);
+      const index = this.gridIndexAt(x, y, GRID_ITEM_SIZE + 20 + GRID_MARGIN);
       if (index >= 0 && index < this.levelItems.length) {
         this.selected = index;
         this.startLevel(this.levelItems[index]);
@@ -155,7 +155,7 @@ export class MainMenu {
       return;
     }
     if (this.screen === 'map-editor-open' || this.screen === 'map-editor-download') {
-      const index = gridIndexAt(x, y, GRID_ITEM_SIZE + 25 + GRID_MARGIN);
+      const index = this.gridIndexAt(x, y, GRID_ITEM_SIZE + 25 + GRID_MARGIN);
       if (index >= 0 && index < this.mapItems.length) {
         this.selected = index;
         if (this.screen === 'map-editor-open') this.openInEditor(this.mapItems[index]);
@@ -422,11 +422,12 @@ export class MainMenu {
     }
     if (count === 0) return;
     let moveToLast = false;
+    const columns = this.gridLayout().columns;
     if (event.code === 'ArrowLeft' || event.code === 'KeyA') this.selected -= 1;
     else if (event.code === 'ArrowRight' || event.code === 'KeyD') this.selected += 1;
-    else if (event.code === 'ArrowUp' || event.code === 'KeyW') this.selected -= GRID_COLUMNS;
+    else if (event.code === 'ArrowUp' || event.code === 'KeyW') this.selected -= columns;
     else if (event.code === 'ArrowDown' || event.code === 'KeyS') {
-      this.selected += GRID_COLUMNS;
+      this.selected += columns;
       moveToLast = true;
     } else return;
     if (this.selected < 0) this.selected += count;
@@ -524,10 +525,10 @@ export class MainMenu {
       writeCentered(ctx, assets, 'press r to refresh or c to join with a code', 1, 75, this.canvas.width);
       return;
     }
-    writeCentered(ctx, assets, `room          players  mode  level`, 1, 55, this.canvas.width);
+    writeCentered(ctx, assets, 'room      p  mode level', 1, 55, this.canvas.width);
     for (let i = 0; i < this.joinRooms.length; i += 1) {
       const room = this.joinRooms[i];
-      const line = `${room.room.padEnd(12)}  ${String(room.players).padEnd(7)}  ${room.mode.padEnd(4)}  ${levelDisplayName(room.level)}`;
+      const line = `${room.room.slice(0, 8).padEnd(8)} ${String(room.players).padStart(2)} ${room.mode.padEnd(4)} ${levelDisplayName(room.level).slice(0, 12).padEnd(12)}`;
       const label = i === this.selected ? `> ${line} <` : `  ${line}  `;
       writeCentered(ctx, assets, label, 1, 75 + i * 15, this.canvas.width);
     }
@@ -609,17 +610,17 @@ export class MainMenu {
       const [sx, sy] = FILL_TILES[i];
       if (i === form.base) {
         ctx.fillStyle = 'rgb(255, 255, 255)';
-        ctx.fillRect(valueX + i * 35 - 2, startY + 40 - 9, 34, 34);
+        ctx.fillRect(valueX + i * 33 - 2, startY + 40 - 9, 34, 34);
       }
-      assets.graphics.draw(ctx, sx, sy, valueX + i * 35, startY + 40 - 7);
+      assets.graphics.draw(ctx, sx, sy, valueX + i * 33, startY + 40 - 7);
     }
     for (let i = 0; i < MODE_SPRITES.length; i += 1) {
       const [sx, sy] = MODE_SPRITES[i];
       if (i === form.mode) {
         ctx.fillStyle = 'rgb(255, 255, 255)';
-        ctx.fillRect(valueX + i * 35 - 2, startY + 80 - 9, 34, 34);
+        ctx.fillRect(valueX + i * 33 - 2, startY + 80 - 9, 34, 34);
       }
-      assets.graphics.draw(ctx, sx, sy, valueX + i * 35, startY + 80 - 7);
+      assets.graphics.draw(ctx, sx, sy, valueX + i * 33, startY + 80 - 7);
     }
     writeFont(ctx, assets, `${form.width}`, 2, valueX, startY + 120);
     writeFont(ctx, assets, `${form.height}`, 2, valueX, startY + 160);
@@ -682,11 +683,12 @@ export class MainMenu {
     }
     if (count === 0) return;
     let moveToLast = false;
+    const columns = this.gridLayout().columns;
     if (event.code === 'ArrowLeft' || event.code === 'KeyA') this.selected -= 1;
     else if (event.code === 'ArrowRight' || event.code === 'KeyD') this.selected += 1;
-    else if (event.code === 'ArrowUp' || event.code === 'KeyW') this.selected -= GRID_COLUMNS;
+    else if (event.code === 'ArrowUp' || event.code === 'KeyW') this.selected -= columns;
     else if (event.code === 'ArrowDown' || event.code === 'KeyS') {
-      this.selected += GRID_COLUMNS;
+      this.selected += columns;
       moveToLast = true;
     } else return;
     if (this.selected < 0) this.selected += count;
@@ -740,8 +742,9 @@ export class MainMenu {
 
   private renderMapGrid(): void {
     const { ctx } = this;
+    const layout = this.gridLayout();
     let cols = 0;
-    let x = GRID_X;
+    let x = layout.x;
     let y = GRID_Y;
     for (let index = 0; index < this.mapItems.length; index += 1) {
       const item = this.mapItems[index];
@@ -760,18 +763,37 @@ export class MainMenu {
       writeFont(ctx, this.assets, tag, 1, x + Math.round((GRID_ITEM_SIZE - tag.length * 8) / 2), y + GRID_ITEM_SIZE + 14);
       cols += 1;
       x += GRID_ITEM_SIZE + GRID_MARGIN;
-      if (cols >= GRID_COLUMNS) {
+      if (cols >= layout.columns) {
         cols = 0;
-        x = GRID_X;
+        x = layout.x;
         y += GRID_ITEM_SIZE + 25 + GRID_MARGIN;
       }
     }
   }
 
+  private gridLayout(): { columns: number; x: number } {
+    const pitch = GRID_ITEM_SIZE + GRID_MARGIN;
+    const columns = Math.max(1, Math.min(GRID_COLUMNS, Math.floor((this.canvas.width - 20) / pitch)));
+    const x = Math.floor((this.canvas.width - (columns * pitch - GRID_MARGIN)) / 2);
+    return { columns, x };
+  }
+
+  private gridIndexAt(x: number, y: number, rowStep: number): number {
+    const layout = this.gridLayout();
+    const pitch = GRID_ITEM_SIZE + GRID_MARGIN;
+    const col = Math.floor((x - layout.x) / pitch);
+    if (col < 0 || col >= layout.columns) return -1;
+    if (x - layout.x - col * pitch > GRID_ITEM_SIZE) return -1;
+    const row = Math.floor((y - GRID_Y) / rowStep);
+    if (row < 0 || y - GRID_Y - row * rowStep > GRID_ITEM_SIZE + 20) return -1;
+    return row * layout.columns + col;
+  }
+
   private renderLevelGrid(): void {
     const { ctx } = this;
+    const layout = this.gridLayout();
     let cols = 0;
-    let x = GRID_X;
+    let x = layout.x;
     let y = GRID_Y;
     for (let index = 0; index < this.levelItems.length; index += 1) {
       const item = this.levelItems[index];
@@ -788,9 +810,9 @@ export class MainMenu {
       writeFont(ctx, this.assets, item.name, 1, x + Math.round((GRID_ITEM_SIZE - item.name.length * 8) / 2), y + GRID_ITEM_SIZE + 10);
       cols += 1;
       x += GRID_ITEM_SIZE + GRID_MARGIN;
-      if (cols >= GRID_COLUMNS) {
+      if (cols >= layout.columns) {
         cols = 0;
-        x = GRID_X;
+        x = layout.x;
         y += GRID_ITEM_SIZE + 20 + GRID_MARGIN;
       }
     }
@@ -877,15 +899,6 @@ function titleCharForKey(event: KeyboardEvent): string | undefined {
   if (/^(Digit|Numpad)\d$/.test(code)) return code.slice(-1);
   if (code === 'Minus') return event.shiftKey ? '_' : '-';
   return undefined;
-}
-
-function gridIndexAt(x: number, y: number, rowStep: number): number {
-  const col = Math.floor((x - GRID_X) / (GRID_ITEM_SIZE + GRID_MARGIN));
-  if (col < 0 || col >= GRID_COLUMNS) return -1;
-  if (x - GRID_X - col * (GRID_ITEM_SIZE + GRID_MARGIN) > GRID_ITEM_SIZE) return -1;
-  const row = Math.floor((y - GRID_Y) / rowStep);
-  if (row < 0 || y - GRID_Y - row * rowStep > GRID_ITEM_SIZE + 20) return -1;
-  return row * GRID_COLUMNS + col;
 }
 
 function levelDisplayName(level: string): string {

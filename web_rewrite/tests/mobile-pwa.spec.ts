@@ -18,76 +18,75 @@ test('menu is navigable by tapping items on a phone', async ({ page }) => {
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.active)).toBe(true);
 
-  await tapCanvas(page, 480, 68); // 'create game'
+  await tapCanvas(page, 195, 68); // 'create game' (canvas is 390 logical px wide on this phone)
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('mode');
-  await tapCanvas(page, 480, 68); // 'deathmatch'
+  await tapCanvas(page, 195, 68); // 'deathmatch'
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('level');
-  await tapCanvas(page, 150, 110); // first level thumbnail
+  await tapCanvas(page, 90, 110); // first level thumbnail (3-column centered grid)
   await page.waitForURL(/play=1/);
   expect(new URL(page.url()).searchParams.get('mode')).toBe('dm');
 });
 
-test('on-screen esc and space buttons drive the menu', async ({ page }) => {
+test('on-screen esc button navigates back through menus', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
-  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.active)).toBe(true);
+  await expect.poll(() => page.evaluate(() => document.body.dataset.inputMode)).toBe('menu');
 
-  await page.locator('.touch-space').click(); // choose 'create game'
+  await tapCanvas(page, 195, 68); // 'create game'
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('mode');
-  await page.locator('.touch-esc').click(); // back to main
+  await page.locator('.esc-button').click(); // back to main
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('main');
-  await page.locator('.touch-s').click(); // move selection down
-  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.selected)).toBe(1);
+  const gameOnlyControls = await page.evaluate(() => ({
+    joy: getComputedStyle(document.querySelector('.joy-zone')!).display,
+    fire: getComputedStyle(document.querySelector('.fire-button')!).display,
+  }));
+  expect(gameOnlyControls).toEqual({ joy: 'none', fire: 'none' });
 });
 
-test('mobile viewport keeps canvas playable with touch controls outside portrait play area', async ({ page }) => {
+test('mobile viewport fills the screen with the canvas and overlays game controls', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?play=1&sound=off');
+  await expect.poll(() => page.evaluate(() => document.body.dataset.inputMode)).toBe('game');
 
   const layout = await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
-    const controls = document.querySelector<HTMLElement>('.touch-controls')!;
-    const pad = document.querySelector<HTMLElement>('.touch-pad')!;
-    const shoot = document.querySelector<HTMLElement>('.touch-space')!;
+    const joyZone = document.querySelector<HTMLElement>('.joy-zone')!;
+    const fire = document.querySelector<HTMLElement>('.fire-button')!;
+    const esc = document.querySelector<HTMLElement>('.esc-button')!;
     const canvasRect = canvas.getBoundingClientRect();
-    const controlsRect = controls.getBoundingClientRect();
-    const padRect = pad.getBoundingClientRect();
-    const shootRect = shoot.getBoundingClientRect();
+    const joyRect = joyZone.getBoundingClientRect();
+    const fireRect = fire.getBoundingClientRect();
     return {
       viewport: { width: innerWidth, height: innerHeight },
-      canvas: {
-        width: canvasRect.width,
-        height: canvasRect.height,
-        bottom: canvasRect.bottom,
-        ratio: canvasRect.width / canvasRect.height,
-      },
-      controls: {
-        top: controlsRect.top,
-        bottom: controlsRect.bottom,
-        left: controlsRect.left,
-        right: controlsRect.right,
-      },
-      pad: { width: padRect.width, height: padRect.height },
-      shoot: { width: shootRect.width, height: shootRect.height },
+      canvas: { width: canvasRect.width, height: canvasRect.height, logicalW: canvas.width, logicalH: canvas.height },
+      joy: { width: joyRect.width, height: joyRect.height, visible: getComputedStyle(joyZone).display !== 'none' },
+      fire: { width: fireRect.width, height: fireRect.height, right: fireRect.right, visible: getComputedStyle(fire).display !== 'none' },
+      escVisible: getComputedStyle(esc).display !== 'none',
+      padVisible: getComputedStyle(document.querySelector('.touch-controls')!).display !== 'none',
     };
   });
 
-  expect(layout.canvas.width).toBeGreaterThan(300);
-  expect(layout.canvas.height).toBeGreaterThan(180);
-  expect(layout.canvas.ratio).toBeCloseTo(1.6, 1);
-  expect(layout.canvas.bottom).toBeLessThanOrEqual(layout.controls.top + 1);
-  expect(layout.controls.left).toBeGreaterThanOrEqual(0);
-  expect(layout.controls.right).toBeLessThanOrEqual(layout.viewport.width);
-  expect(layout.controls.bottom).toBeLessThanOrEqual(layout.viewport.height);
-  expect(layout.pad.width).toBeGreaterThan(150);
-  expect(layout.pad.height).toBeGreaterThan(100);
-  expect(layout.shoot.width).toBeGreaterThan(110);
-  expect(layout.shoot.height).toBeGreaterThan(45);
+  // Canvas fills the whole screen and its logical resolution matches 1:1.
+  expect(layout.canvas.width).toBe(layout.viewport.width);
+  expect(layout.canvas.height).toBe(layout.viewport.height);
+  expect(layout.canvas.logicalW).toBe(Math.round(layout.canvas.width));
+  expect(layout.canvas.logicalH).toBe(Math.round(layout.canvas.height));
+  // Floating joystick zone covers the left side; fire button sits bottom-right.
+  expect(layout.joy.visible).toBe(true);
+  expect(layout.joy.width).toBeGreaterThan(layout.viewport.width / 2);
+  expect(layout.joy.height).toBe(layout.viewport.height);
+  expect(layout.fire.visible).toBe(true);
+  expect(layout.fire.width).toBeGreaterThan(80);
+  expect(layout.fire.right).toBeLessThanOrEqual(layout.viewport.width);
+  expect(layout.escVisible).toBe(true);
+  // The editor d-pad cluster stays hidden during play.
+  expect(layout.padVisible).toBe(false);
 });
 
-test('touch controls support simultaneous mobile movement and shooting', async ({ page }) => {
+test('floating joystick moves the tank while the fire button shoots', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?play=1&sound=off');
+  await expect.poll(() => page.evaluate(() => document.body.dataset.inputMode)).toBe('game');
 
   const start = await page.evaluate(() => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; ammo: number }; bullets: Map<string, unknown> } }).game!;
@@ -98,14 +97,14 @@ test('touch controls support simultaneous mobile movement and shooting', async (
     return { x: game.localPlayer.x, y: game.localPlayer.y };
   });
 
-  await page.locator('.touch-w').dispatchEvent('pointerdown', { pointerId: 20, pointerType: 'touch', bubbles: true, cancelable: true });
-  await page.locator('.touch-d').dispatchEvent('pointerdown', { pointerId: 21, pointerType: 'touch', bubbles: true, cancelable: true });
+  const joy = page.locator('.joy-zone');
+  await joy.dispatchEvent('pointerdown', { pointerId: 20, pointerType: 'touch', clientX: 120, clientY: 500, bubbles: true, cancelable: true });
+  await joy.dispatchEvent('pointermove', { pointerId: 20, pointerType: 'touch', clientX: 180, clientY: 500, bubbles: true, cancelable: true });
   await page.waitForTimeout(450);
-  await page.locator('.touch-space').dispatchEvent('pointerdown', { pointerId: 22, pointerType: 'touch', bubbles: true, cancelable: true });
+  await page.locator('.fire-button').dispatchEvent('pointerdown', { pointerId: 22, pointerType: 'touch', bubbles: true, cancelable: true });
   await page.waitForTimeout(180);
-  await page.locator('.touch-space').dispatchEvent('pointerup', { pointerId: 22, pointerType: 'touch', bubbles: true, cancelable: true });
-  await page.locator('.touch-d').dispatchEvent('pointerup', { pointerId: 21, pointerType: 'touch', bubbles: true, cancelable: true });
-  await page.locator('.touch-w').dispatchEvent('pointerup', { pointerId: 20, pointerType: 'touch', bubbles: true, cancelable: true });
+  await page.locator('.fire-button').dispatchEvent('pointerup', { pointerId: 22, pointerType: 'touch', bubbles: true, cancelable: true });
+  await joy.dispatchEvent('pointerup', { pointerId: 20, pointerType: 'touch', clientX: 180, clientY: 500, bubbles: true, cancelable: true });
 
   const state = await page.evaluate(() => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; ammo: number; direction: number }; bullets: Map<string, unknown>; soundEvents: () => string[] } }).game!;
@@ -119,7 +118,7 @@ test('touch controls support simultaneous mobile movement and shooting', async (
   });
 
   expect(state.x).toBeGreaterThan(start.x);
-  expect(state.y).toBeLessThan(start.y);
+  expect(state.y).toBe(start.y);
   expect(state.ammo).toBe(74);
   expect(state.bullets).toBe(1);
   expect(state.sounds).toEqual(['shoot']);

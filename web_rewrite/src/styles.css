@@ -50,21 +50,101 @@ body {
   object-fit: contain;
 }
 
-.touch-controls {
+.touch-layer {
   --control-size: clamp(50px, 13vw, 72px);
   --control-gap: clamp(6px, 1.6vw, 12px);
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.touch-controls {
   position: fixed;
   inset:
     auto
     calc(14px + env(safe-area-inset-right))
     calc(14px + env(safe-area-inset-bottom))
     calc(14px + env(safe-area-inset-left));
-  z-index: 2;
-  display: flex;
+  display: none;
   align-items: end;
   justify-content: space-between;
   gap: 18px;
   pointer-events: none;
+}
+
+body[data-input-mode='editor'] .touch-controls {
+  display: flex;
+}
+
+.joy-zone {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 62vw;
+  height: 100dvh;
+  display: none;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+body[data-input-mode='game'] .joy-zone {
+  display: block;
+}
+
+.joy-base {
+  position: fixed;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border: 2px solid rgba(230, 230, 230, 0.55);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  display: none;
+  pointer-events: none;
+}
+
+.joy-base.is-active {
+  display: block;
+}
+
+.joy-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  border-radius: 50%;
+  background: rgba(240, 240, 240, 0.6);
+}
+
+.fire-button.touch-button {
+  position: fixed;
+  right: calc(20px + env(safe-area-inset-right));
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  width: clamp(84px, 24vw, 112px);
+  height: clamp(84px, 24vw, 112px);
+  border-radius: 50%;
+  display: none;
+}
+
+body[data-input-mode='game'] .fire-button.touch-button {
+  display: block;
+}
+
+.esc-button.touch-button {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  width: 58px;
+  height: 38px;
+  display: none;
+}
+
+body[data-input-mode='game'] .esc-button.touch-button,
+body[data-input-mode='menu'] .esc-button.touch-button {
+  display: block;
 }
 
 .touch-pad {
@@ -125,43 +205,48 @@ body {
   width: clamp(112px, 31vw, 168px);
 }
 
-@media (pointer: fine) and (min-width: 900px) {
-  .touch-controls {
-    opacity: 0.7;
+@media (pointer: fine) and (min-width: 900px) and (min-height: 521px) {
+  .touch-layer {
+    display: none;
   }
 }
 
+/* Touch layout: the canvas fills the screen (its logical resolution is matched
+   to the CSS size in main.ts) and controls overlay it. */
 @media (pointer: coarse), (max-width: 820px), (max-height: 520px) {
   .game-shell {
+    padding: 0;
+  }
+
+  #game {
+    width: 100vw;
+    width: 100dvw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    aspect-ratio: auto;
+  }
+
+  body[data-input-mode='editor'] .game-shell {
     --controls-reserve: calc(clamp(50px, 13vw, 72px) * 2 + clamp(6px, 1.6vw, 12px) + 26px);
+  }
+
+  body[data-input-mode='editor'] #game {
+    height: calc(100vh - var(--controls-reserve));
+    height: calc(100dvh - var(--controls-reserve));
   }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
-  .touch-controls {
+  .touch-layer {
     --control-size: clamp(42px, 12vh, 58px);
     --control-gap: clamp(5px, 1.8vh, 8px);
-    inset:
-      auto
-      calc(10px + env(safe-area-inset-right))
-      calc(10px + env(safe-area-inset-bottom))
-      calc(10px + env(safe-area-inset-left));
-  }
-
-  .game-shell {
-    --controls-reserve: 0px;
-  }
-
-  #game {
-    width: min(100%, 960px, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 1.6));
-    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   }
 }
 
 @media (max-width: 380px) {
-  .touch-controls {
+  .touch-layer {
     --control-size: 46px;
-    gap: 10px;
   }
 
   .touch-space {
