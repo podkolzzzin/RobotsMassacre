@@ -106,11 +106,11 @@ export class Game {
     this.updateBuildings();
     this.updateInventorySelection(player);
     this.updateCarriedBuilding(player);
-    const moveDirection = this.getMoveDirection();
-    player.moving = moveDirection !== undefined;
+    const moveInput = this.getMoveInput();
+    player.moving = moveInput.moving;
 
-    if (moveDirection !== undefined) {
-      this.movePlayer(player, moveDirection);
+    if (moveInput.moving) {
+      this.movePlayer(player, moveInput);
       const maxSpeed = this.maxSpeed(player, now);
       if (this.speed < maxSpeed) this.speed = Math.min(maxSpeed, this.speed + SPEED_DELTA);
       if (this.skippedTrackTicks++ > 2) {
@@ -132,7 +132,7 @@ export class Game {
       if (player.holdingFlag) {
         player.shooting = false;
       } else if (selectedItem && selectedItem.kind !== 'cannon') {
-        this.useInventoryItem(player, selectedItem);
+        if (this.useInventoryItem(player, selectedItem)) this.input.suppressAttackUntilRelease();
       } else if (player.ammo > 0 && now - this.lastShot >= SHOT_DELAY) {
         this.lastShot = now;
         player.shooting = true;
@@ -558,27 +558,20 @@ export class Game {
     return y;
   }
 
-  private getMoveDirection(): Direction | undefined {
-    if (this.input.down.has('KeyA') || this.input.down.has('ArrowLeft')) return Direction.Left;
-    if (this.input.down.has('KeyD') || this.input.down.has('ArrowRight')) return Direction.Right;
-    if (this.input.down.has('KeyW') || this.input.down.has('ArrowUp')) return Direction.Up;
-    if (this.input.down.has('KeyS') || this.input.down.has('ArrowDown')) return Direction.Down;
-    return undefined;
+  private getMoveInput(): { moving: boolean; x: number; y: number; facing?: Direction } {
+    const vector = this.input.movementVector();
+    const moving = vector.x !== 0 || vector.y !== 0;
+    const facing = directionForCode(this.input.latestMovementCode()) ?? directionForVector(vector.x, vector.y);
+    return { moving, x: vector.x, y: vector.y, facing };
   }
 
-  private movePlayer(player: PlayerState, direction: Direction): void {
-    const oldX = player.x;
-    const oldY = player.y;
-    player.direction = direction;
-    if (direction === Direction.Left) player.x -= this.speed;
-    else if (direction === Direction.Right) player.x += this.speed;
-    else if (direction === Direction.Up) player.y -= this.speed;
-    else if (direction === Direction.Down) player.y += this.speed;
-
-    if (this.blockedAt(player, player.x, player.y)) {
-      player.x = oldX;
-      player.y = oldY;
-    }
+  private movePlayer(player: PlayerState, input: { x: number; y: number; facing?: Direction }): void {
+    if (input.facing !== undefined) player.direction = input.facing;
+    const length = Math.hypot(input.x, input.y) || 1;
+    const dx = input.x / length * this.speed;
+    const dy = input.y / length * this.speed;
+    if (dx !== 0 && !this.blockedAt(player, player.x + dx, player.y)) player.x += dx;
+    if (dy !== 0 && !this.blockedAt(player, player.x, player.y + dy)) player.y += dy;
   }
 
   private updateInventorySelection(player: PlayerState): void {
@@ -641,12 +634,13 @@ export class Game {
     player.carriedBuildingId = undefined;
   }
 
-  private useInventoryItem(player: PlayerState, item: InventoryItemState): void {
+  private useInventoryItem(player: PlayerState, item: InventoryItemState): boolean {
     const [ox, oy] = newEntityOffset(player);
     const entity = placedEntity(item.kind, player.id, player.x + ox, player.y + oy, `${this.localId}:entity:${++this.entityId}`);
-    if (!entity || this.placementBlocked(entity, player)) return;
+    if (!entity || this.placementBlocked(entity, player)) return false;
     this.level.entities.push(entity);
     this.consumeInventoryItem(player, item);
+    return true;
   }
 
   private placementBlocked(entity: StaticEntity, player: PlayerState): boolean {
@@ -830,6 +824,7 @@ export class Game {
 
       if (team !== player.team && !player.holdingFlag && !flag.removed) {
         player.holdingFlag = team;
+        flag.flagVersion = (flag.flagVersion ?? 0) + 1;
         flag.removed = true;
         flag.solid = false;
       } else if (team === player.team && player.holdingFlag && player.holdingFlag !== player.team) {
@@ -843,6 +838,7 @@ export class Game {
   private returnFlag(team: Team): void {
     const flag = this.flags().find((entity) => flagTeam(entity) === team);
     if (!flag) return;
+    flag.flagVersion = (flag.flagVersion ?? 0) + 1;
     flag.removed = false;
     flag.solid = false;
   }
@@ -1180,6 +1176,10 @@ export class Game {
     for (const flag of flags) {
       const entity = this.level.entities.find((candidate) => candidate.kind === flag.kind && flagTeam(candidate) !== undefined);
       if (!entity) continue;
+      const localVersion = entity.flagVersion ?? 0;
+      const remoteVersion = flag.flagVersion ?? 0;
+      if (remoteVersion < localVersion) continue;
+      entity.flagVersion = remoteVersion;
       entity.removed = flag.removed;
       entity.solid = false;
     }
@@ -1513,6 +1513,22 @@ function moveBullet(bullet: BulletState): void {
   if (bullet.direction === Direction.Right) bullet.x += speed;
   if (bullet.direction === Direction.Down) bullet.y += speed;
   if (bullet.direction === Direction.Left) bullet.x -= speed;
+}
+
+function directionForCode(code: string | undefined): Direction | undefined {
+  if (code === 'KeyA' || code === 'ArrowLeft') return Direction.Left;
+  if (code === 'KeyD' || code === 'ArrowRight') return Direction.Right;
+  if (code === 'KeyW' || code === 'ArrowUp') return Direction.Up;
+  if (code === 'KeyS' || code === 'ArrowDown') return Direction.Down;
+  return undefined;
+}
+
+function directionForVector(x: number, y: number): Direction | undefined {
+  if (x < 0) return Direction.Left;
+  if (x > 0) return Direction.Right;
+  if (y < 0) return Direction.Up;
+  if (y > 0) return Direction.Down;
+  return undefined;
 }
 
 function unitHue(id: string): number {

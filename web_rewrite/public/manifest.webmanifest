@@ -1,0 +1,27 @@
+{
+  "name": "Robots Massacre",
+  "short_name": "Robots",
+  "description": "Pixel tank battle game with WebRTC multiplayer.",
+  "id": "/",
+  "start_url": "/?play=1",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "categories": ["games"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -42,6 +42,42 @@ test('loads and renders the game canvas', async ({ page }) => {
   expect(nonBlackPixels).toBeGreaterThan(5000);
 });
 
+test('mouse clickable controls mimic keyboard movement and shooting', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await expect(page.locator('.touch-w')).toBeVisible();
+  await expect(page.locator('.touch-space')).toBeVisible();
+
+  const start = await page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; ammo: number }; bullets: Map<string, unknown> } }).game!;
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.ammo = 75;
+    game.bullets.clear();
+    return { x: game.localPlayer.x, y: game.localPlayer.y };
+  });
+
+  await page.locator('.touch-d').dispatchEvent('pointerdown', { pointerId: 10, pointerType: 'mouse', bubbles: true, cancelable: true });
+  await page.waitForTimeout(180);
+  await page.locator('.touch-d').dispatchEvent('pointerup', { pointerId: 10, pointerType: 'mouse', bubbles: true, cancelable: true });
+
+  const moved = await page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
+    return { x: game.localPlayer.x, y: game.localPlayer.y, direction: game.localPlayer.direction };
+  });
+  expect(moved.x).toBeGreaterThan(start.x);
+  expect(moved.y).toBeCloseTo(start.y, 5);
+  expect(moved.direction).toBe(1);
+
+  await page.locator('.touch-space').dispatchEvent('pointerdown', { pointerId: 11, pointerType: 'mouse', bubbles: true, cancelable: true });
+  await page.waitForTimeout(120);
+  await page.locator('.touch-space').dispatchEvent('pointerup', { pointerId: 11, pointerType: 'mouse', bubbles: true, cancelable: true });
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { ammo: number }; bullets: Map<string, unknown>; soundEvents: () => string[] } }).game!;
+    return { bullets: game.bullets.size, ammo: game.localPlayer.ammo, sounds: game.soundEvents() };
+  })).toMatchObject({ bullets: 1, ammo: 74, sounds: ['shoot'] });
+});
+
 test('hud renders original bottom bar icons and bitmap font', async ({ page }) => {
   await page.goto(playUrl());
   const comparison = await page.evaluate(async () => {
@@ -659,6 +695,62 @@ test('selected non-cannon inventory places a building instead of shooting', asyn
     inventory: [{ kind: 'cannon', activationKey: 1, imageIndex: 9, amount: 1 }],
     selected: 1,
     placed: [{ kind: 'turret', x: 180, y: 211, health: 125, maxHealth: 125, solid: true, removed: false }],
+  });
+});
+
+test('holding attack after deploy does not fire accidental cannon shot', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: {
+        x: number;
+        y: number;
+        direction: number;
+        ammo: number;
+        inventory: Array<{ kind: string; activationKey: number; imageIndex: number; amount: number }>;
+        currentInventoryKey: number;
+      };
+      bullets: Map<string, unknown>;
+      level: { entities: Array<unknown> };
+    } }).game!;
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.direction = 2;
+    game.localPlayer.ammo = 75;
+    game.localPlayer.inventory = [
+      { kind: 'cannon', activationKey: 1, imageIndex: 9, amount: 1 },
+      { kind: 'mine', activationKey: 2, imageIndex: 8, amount: 1 },
+    ];
+    game.localPlayer.currentInventoryKey = 2;
+    game.bullets.clear();
+    game.level.entities = [];
+  });
+
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(650);
+  await page.keyboard.up('Space');
+
+  const state = await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { ammo: number; currentInventoryKey: number; inventory: Array<{ kind: string }> };
+      bullets: Map<string, unknown>;
+      level: { entities: Array<{ kind?: string }> };
+    } }).game!;
+    return {
+      bullets: game.bullets.size,
+      ammo: game.localPlayer.ammo,
+      selected: game.localPlayer.currentInventoryKey,
+      inventory: game.localPlayer.inventory,
+      mines: game.level.entities.filter((entity) => entity.kind === 'mine').length,
+    };
+  });
+
+  expect(state).toEqual({
+    bullets: 0,
+    ammo: 75,
+    selected: 1,
+    inventory: [{ kind: 'cannon', activationKey: 1, imageIndex: 9, amount: 1 }],
+    mines: 1,
   });
 });
 
@@ -1736,7 +1828,7 @@ test('water tiles animate after original skipped redraw cadence', async ({ page 
   }, initial!.frame)).toBe(true);
 });
 
-test('movement uses original cardinal input priority', async ({ page }) => {
+test('movement accepts simultaneous directional input', async ({ page }) => {
   await page.goto(playUrl());
   const start = await page.evaluate(() => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
@@ -1755,9 +1847,9 @@ test('movement uses original cardinal input priority', async ({ page }) => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
     return { x: game.localPlayer.x, y: game.localPlayer.y, direction: game.localPlayer.direction };
   });
-  expect(end.direction).toBe(1);
+  expect(end.direction).toBe(0);
   expect(end.x).toBeGreaterThan(start.x);
-  expect(end.y).toBeCloseTo(start.y, 5);
+  expect(end.y).toBeLessThan(start.y);
 });
 
 test('player track animation resets idle and advances while moving', async ({ page }) => {

@@ -3,7 +3,7 @@ import { SoundBank } from './audio';
 import { loadAssets } from './assets';
 import { EditorHost } from './editor';
 import { Game } from './game';
-import { InputState } from './input';
+import { InputState, mountPointerControls } from './input';
 import { loadLevel, parseLevel } from './level';
 import { MainMenu, resizeCanvas } from './menu';
 import { isLocalMapPath, loadGameSettings, loadGameStats, loadLocalMapByPath, saveGameStats } from './storage';
@@ -27,7 +27,9 @@ async function main(): Promise<void> {
   ]);
   const sounds = new SoundBank(params.get('sound') !== 'off');
   const mode = params.get('mode') ?? 'dm';
-  const game = new Game(canvas, ctx, level, assets, new InputState(window), sounds, mode);
+  const input = new InputState(window);
+  mountPointerControls(input);
+  const game = new Game(canvas, ctx, level, assets, input, sounds, mode);
   if (settings.name) game.localPlayer.name = settings.name;
   const team = params.get('team');
   if (team === 'red' || team === 'blu') game.localPlayer.team = team;
@@ -57,6 +59,7 @@ async function main(): Promise<void> {
   const room = params.get('room');
   const signal = params.get('signal') === 'broadcast' ? 'broadcast' : 'worker';
   if (room) multiplayer.connect(room, signal);
+  registerServiceWorker(params);
 
   let lastTick = performance.now();
   function frame(now: number): void {
@@ -79,6 +82,18 @@ async function main(): Promise<void> {
   requestAnimationFrame(frame);
 
   Object.assign(window, { game, multiplayer, menu, editor: editorHost });
+}
+
+function registerServiceWorker(params: URLSearchParams): void {
+  if (params.get('sw') === 'off' || !('serviceWorker' in navigator)) return;
+  if (import.meta.env.DEV && params.get('sw') !== 'on') return;
+  const register = () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // The game remains playable when install support is unavailable.
+    });
+  };
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
 }
 
 void main();

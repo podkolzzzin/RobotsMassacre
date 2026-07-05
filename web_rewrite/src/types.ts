@@ -76,6 +76,7 @@ export interface StaticEntity {
   skippedAnimTicks?: number;
   countdown?: boolean;
   skippedExplTicks?: number;
+  flagVersion?: number;
 }
 
 export interface LevelData {

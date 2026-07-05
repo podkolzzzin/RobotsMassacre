@@ -7,15 +7,163 @@ body {
   background: #000;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   display: grid;
   place-items: center;
+  touch-action: none;
+  user-select: none;
+  min-height: 100dvh;
+  min-height: 100svh;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.game-shell {
+  --controls-reserve: 0px;
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100dvh;
+  height: 100svh;
+  padding:
+    max(env(safe-area-inset-top), 0px)
+    max(env(safe-area-inset-right), 0px)
+    calc(var(--controls-reserve) + max(env(safe-area-inset-bottom), 0px))
+    max(env(safe-area-inset-left), 0px);
+  box-sizing: border-box;
 }
 
 #game {
-  width: min(100vw, 960px);
-  height: min(100vh, 600px);
+  display: block;
+  width: min(100%, 960px, calc((100dvh - var(--controls-reserve) - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 1.6));
+  height: auto;
+  max-height: calc(100dvh - var(--controls-reserve) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  aspect-ratio: 8 / 5;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   background: #000;
+  object-fit: contain;
+}
+
+.touch-controls {
+  --control-size: clamp(50px, 13vw, 72px);
+  --control-gap: clamp(6px, 1.6vw, 12px);
+  position: fixed;
+  inset:
+    auto
+    calc(14px + env(safe-area-inset-right))
+    calc(14px + env(safe-area-inset-bottom))
+    calc(14px + env(safe-area-inset-left));
+  z-index: 2;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  pointer-events: none;
+}
+
+.touch-pad {
+  display: grid;
+  grid-template-columns: repeat(3, var(--control-size));
+  grid-template-rows: repeat(2, var(--control-size));
+  gap: var(--control-gap);
+  grid-template-areas:
+    ". w ."
+    "a s d";
+}
+
+.touch-actions {
+  display: flex;
+  align-items: end;
+}
+
+.touch-button {
+  width: var(--control-size);
+  height: var(--control-size);
+  border: 2px solid #d8d8d8;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #f7f7f7;
+  font: 700 clamp(13px, 3.2vw, 18px)/1 monospace;
+  letter-spacing: 0;
+  image-rendering: pixelated;
+  pointer-events: auto;
+  touch-action: none;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.touch-button.is-pressed,
+.touch-button:active {
+  background: rgba(130, 142, 160, 0.84);
+  color: #fff;
+}
+
+.touch-w {
+  grid-area: w;
+}
+
+.touch-a {
+  grid-area: a;
+}
+
+.touch-s {
+  grid-area: s;
+}
+
+.touch-d {
+  grid-area: d;
+}
+
+.touch-space {
+  width: clamp(112px, 31vw, 168px);
+}
+
+@media (pointer: fine) and (min-width: 900px) {
+  .touch-controls {
+    opacity: 0.7;
+  }
+}
+
+@media (pointer: coarse), (max-width: 820px), (max-height: 520px) {
+  .game-shell {
+    --controls-reserve: calc(clamp(50px, 13vw, 72px) * 2 + clamp(6px, 1.6vw, 12px) + 26px);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .touch-controls {
+    --control-size: clamp(42px, 12vh, 58px);
+    --control-gap: clamp(5px, 1.8vh, 8px);
+    inset:
+      auto
+      calc(10px + env(safe-area-inset-right))
+      calc(10px + env(safe-area-inset-bottom))
+      calc(10px + env(safe-area-inset-left));
+  }
+
+  .game-shell {
+    --controls-reserve: 0px;
+  }
+
+  #game {
+    width: min(100%, 960px, calc((100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * 1.6));
+    max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 380px) {
+  .touch-controls {
+    --control-size: 46px;
+    gap: 10px;
+  }
+
+  .touch-space {
+    width: 96px;
+  }
 }
