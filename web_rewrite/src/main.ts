@@ -5,8 +5,8 @@ import { EditorHost } from './editor';
 import { Game } from './game';
 import { InputState } from './input';
 import { loadLevel, parseLevel } from './level';
-import { MainMenu } from './menu';
-import { isLocalMapPath, loadLocalMapByPath } from './storage';
+import { MainMenu, resizeCanvas } from './menu';
+import { isLocalMapPath, loadGameSettings, loadGameStats, loadLocalMapByPath, saveGameStats } from './storage';
 import { TICK_MS } from './types';
 import { Multiplayer } from './webrtc';
 
@@ -17,6 +17,8 @@ async function main(): Promise<void> {
   if (!ctx) throw new Error('2D canvas is not available');
 
   const params = new URLSearchParams(location.search);
+  const settings = loadGameSettings();
+  if (settings.width && settings.height) resizeCanvas(canvas, settings.width, settings.height);
   const levelPath = params.get('level') ?? '/levels/dm/open.rmm';
   const localBuffer = isLocalMapPath(levelPath) ? loadLocalMapByPath(levelPath) : undefined;
   const [assets, level] = await Promise.all([
@@ -26,8 +28,24 @@ async function main(): Promise<void> {
   const sounds = new SoundBank(params.get('sound') !== 'off');
   const mode = params.get('mode') ?? 'dm';
   const game = new Game(canvas, ctx, level, assets, new InputState(window), sounds, mode);
+  if (settings.name) game.localPlayer.name = settings.name;
   const team = params.get('team');
   if (team === 'red' || team === 'blu') game.localPlayer.team = team;
+
+  const playing = params.get('play') === '1';
+  const sessionStart = performance.now();
+  window.addEventListener('pagehide', () => {
+    const stats = loadGameStats();
+    stats.kills += game.localPlayer.kills;
+    stats.deaths += game.localPlayer.deaths;
+    stats.shots += game.localStats.shots;
+    stats.hits += game.localStats.hits;
+    if (playing) {
+      stats.timeMs += performance.now() - sessionStart;
+      stats.games += 1;
+    }
+    saveGameStats(stats);
+  });
   const editorHost = new EditorHost(canvas, ctx, assets);
   const menu = new MainMenu(canvas, ctx, assets, game, params.get('play') !== '1' && params.get('menu') !== '0', mode, editorHost);
   editorHost.onExit = () => {

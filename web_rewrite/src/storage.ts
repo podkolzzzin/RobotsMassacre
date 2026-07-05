@@ -1,6 +1,59 @@
 const INDEX_KEY = 'rmm-maps';
 const MAP_KEY_PREFIX = 'rmm-map:';
 const LOCAL_PATH_PREFIX = 'local:';
+const SETTINGS_KEY = 'rmm-settings';
+const STATS_KEY = 'rmm-stats';
+
+export interface GameSettings {
+  name?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface GameStats {
+  kills: number;
+  deaths: number;
+  shots: number;
+  hits: number;
+  timeMs: number;
+  games: number;
+}
+
+export function loadGameSettings(): GameSettings {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}');
+    return typeof parsed === 'object' && parsed !== null ? (parsed as GameSettings) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveGameSettings(settings: GameSettings): void {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+export function loadGameStats(): GameStats {
+  const empty: GameStats = { kills: 0, deaths: 0, shots: 0, hits: 0, timeMs: 0, games: 0 };
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(STATS_KEY) ?? '{}');
+    if (typeof parsed !== 'object' || parsed === null) return empty;
+    const stats = parsed as Partial<GameStats>;
+    return {
+      kills: stats.kills ?? 0,
+      deaths: stats.deaths ?? 0,
+      shots: stats.shots ?? 0,
+      hits: stats.hits ?? 0,
+      timeMs: stats.timeMs ?? 0,
+      games: stats.games ?? 0,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+export function saveGameStats(stats: GameStats): void {
+  localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+}
 
 export interface LocalMapInfo {
   mode: string;

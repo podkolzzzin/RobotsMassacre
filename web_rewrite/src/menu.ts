@@ -2,7 +2,7 @@ import { Assets, writeFont } from './assets';
 import { EditorHost, EditorMode, FILL_TILES, MAX_MAP_NAME, MAX_MAP_SIZE, MIN_MAP_SIZE, MODE_SPRITES, inferModeFromBuffer } from './editor';
 import type { Game } from './game';
 import { createThumbnail } from './level';
-import { listLocalMaps, loadLocalMap, localMapPath } from './storage';
+import { listLocalMaps, loadGameStats, loadLocalMap, localMapPath, saveGameSettings } from './storage';
 import type { Team } from './types';
 
 const MENU_ITEMS = ['create game', 'join game', 'map editor', 'settings', 'how to play', 'credits', 'quit'];
@@ -58,6 +58,8 @@ const MAP_EDITOR_HELP_LINES = [
 ];
 const CREATE_FORM_LABELS = ['title: ', 'base: ', 'mode: ', 'width: ', 'height: '];
 const SETTINGS_OPTIONS_Y = [60, 175, 195];
+const DIMENSIONS: Array<[number, number]> = [[640, 480], [800, 600], [960, 600]];
+const MAX_PLAYER_NAME = 16;
 type MenuScreen = 'main' | 'mode' | 'level' | 'join' | 'team' | 'pause' | 'help' | 'credits' | 'settings'
   | 'map-editor' | 'map-editor-help' | 'map-editor-create' | 'map-editor-open' | 'map-editor-download';
 
@@ -195,14 +197,7 @@ export class MainMenu {
       return;
     }
     if (this.screen === 'settings') {
-      if (event.code === 'Escape') {
-        this.screen = 'main';
-        this.selected = 0;
-        event.preventDefault();
-      } else if (event.code === 'Tab') {
-        this.settingsOption = (this.settingsOption + 1) % SETTINGS_OPTIONS_Y.length;
-        event.preventDefault();
-      }
+      this.onSettingsKey(event);
       return;
     }
     if (this.screen === 'level') {
@@ -283,7 +278,9 @@ export class MainMenu {
       } else if (this.selected === 3) {
         this.screen = 'settings';
       } else {
-        this.active = false;
+        window.close();
+        // window.close() is ignored for tabs the user opened; leave the game either way.
+        location.href = 'about:blank';
       }
       return;
     }
@@ -390,6 +387,30 @@ export class MainMenu {
       this.joinCode = this.joinCode.slice(0, -1);
     } else if (/^[a-z0-9-]$/.test(event.key.toLowerCase()) && this.joinCode.length < 15) {
       this.joinCode += event.key.toLowerCase();
+    }
+    event.preventDefault();
+  }
+
+  private onSettingsKey(event: KeyboardEvent): void {
+    const { code } = event;
+    if (code === 'Escape') {
+      saveGameSettings({ name: this.game.localPlayer.name, width: this.canvas.width, height: this.canvas.height });
+      this.screen = 'main';
+      this.selected = 0;
+    } else if (code === 'Tab') {
+      this.settingsOption = (this.settingsOption + 1) % SETTINGS_OPTIONS_Y.length;
+    } else if (this.settingsOption === 1 && (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'ArrowUp' || code === 'ArrowDown')) {
+      const delta = code === 'ArrowLeft' || code === 'ArrowDown' ? -1 : 1;
+      const current = DIMENSIONS.findIndex(([w, h]) => w === this.canvas.width && h === this.canvas.height);
+      const next = DIMENSIONS[((current < 0 ? DIMENSIONS.length - 1 : current) + delta + DIMENSIONS.length) % DIMENSIONS.length];
+      resizeCanvas(this.canvas, next[0], next[1]);
+    } else if (this.settingsOption === 2 && code === 'Backspace') {
+      this.game.localPlayer.name = this.game.localPlayer.name.slice(0, -1);
+    } else if (this.settingsOption === 2 && this.game.localPlayer.name.length < MAX_PLAYER_NAME) {
+      const char = titleCharForKey(event);
+      if (char) this.game.localPlayer.name += char;
+    } else {
+      return;
     }
     event.preventDefault();
   }
@@ -667,12 +688,18 @@ export class MainMenu {
   private renderSettings(): void {
     const x = 100;
     writeFont(this.ctx, this.assets, 'statistics:', 1, x, 60);
+    const stored = loadGameStats();
+    const kills = stored.kills + this.game.localPlayer.kills;
+    const deaths = stored.deaths + this.game.localPlayer.deaths;
+    const shots = stored.shots + this.game.localStats.shots;
+    const hits = stored.hits + this.game.localStats.hits;
+    const seconds = Math.floor(stored.timeMs / 1000);
     const stats = [
-      `${this.game.localPlayer.kills} kills`,
-      `${this.game.localPlayer.deaths} deaths`,
-      '0 hours 0 min 0 sec in game',
-      '0 games played',
-      `${this.game.localStats.shots > 0 ? this.game.localStats.hits / this.game.localStats.shots : 0} is your accuracy`,
+      `${kills} kills`,
+      `${deaths} deaths`,
+      `${Math.floor(seconds / 3600)} hours ${Math.floor(seconds / 60) % 60} min ${seconds % 60} sec in game`,
+      `${stored.games} games played`,
+      `${shots > 0 ? Math.round((hits / shots) * 100) / 100 : 0} is your accuracy`,
     ];
     let y = 80;
     for (const line of stats) {
@@ -681,9 +708,9 @@ export class MainMenu {
     }
 
     writeFont(this.ctx, this.assets, 'dimension:', 1, x, 175);
-    writeFont(this.ctx, this.assets, '800x600', 1, x + 100, 175);
+    writeFont(this.ctx, this.assets, `< ${this.canvas.width}x${this.canvas.height} >`, 1, x + 100, 175);
     writeFont(this.ctx, this.assets, 'username:', 1, x, 195);
-    writeFont(this.ctx, this.assets, this.game.localPlayer.name, 1, x + 92, 195);
+    writeFont(this.ctx, this.assets, this.game.localPlayer.name + (this.settingsOption === 2 ? '-' : ''), 1, x + 92, 195);
     writeFont(this.ctx, this.assets, '>', 1, 85, SETTINGS_OPTIONS_Y[this.settingsOption]);
     writeCentered(this.ctx, this.assets, 'esc to save / tab to change active option', 1, this.canvas.height - 20, this.canvas.width);
   }
@@ -692,6 +719,13 @@ export class MainMenu {
 function writeCentered(ctx: CanvasRenderingContext2D, assets: Assets, text: string, size: 1 | 2, y: number, width: number): void {
   const letterSize = 8 * size;
   writeFont(ctx, assets, text, size, Math.round((width - text.length * letterSize) / 2), y);
+}
+
+export function resizeCanvas(canvas: HTMLCanvasElement, width: number, height: number): void {
+  canvas.width = width;
+  canvas.height = height;
+  canvas.style.width = `min(100vw, ${width}px)`;
+  canvas.style.height = `min(100vh, ${height}px)`;
 }
 
 // Map physical keys to title characters so typing works on any keyboard layout.
