@@ -1,5 +1,45 @@
 import { expect, test } from '@playwright/test';
 
+interface MenuWindow {
+  menu?: { active: boolean; screen: string; selected: number };
+}
+
+async function tapCanvas(page: import('@playwright/test').Page, logicalX: number, logicalY: number): Promise<void> {
+  const rect = await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('#game')!;
+    const bounds = canvas.getBoundingClientRect();
+    return { left: bounds.left, top: bounds.top, scaleX: bounds.width / canvas.width, scaleY: bounds.height / canvas.height };
+  });
+  await page.mouse.click(rect.left + logicalX * rect.scaleX, rect.top + logicalY * rect.scaleY);
+}
+
+test('menu is navigable by tapping items on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.active)).toBe(true);
+
+  await tapCanvas(page, 480, 68); // 'create game'
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('mode');
+  await tapCanvas(page, 480, 68); // 'deathmatch'
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('level');
+  await tapCanvas(page, 150, 110); // first level thumbnail
+  await page.waitForURL(/play=1/);
+  expect(new URL(page.url()).searchParams.get('mode')).toBe('dm');
+});
+
+test('on-screen esc and space buttons drive the menu', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.active)).toBe(true);
+
+  await page.locator('.touch-space').click(); // choose 'create game'
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('mode');
+  await page.locator('.touch-esc').click(); // back to main
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('main');
+  await page.locator('.touch-s').click(); // move selection down
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.selected)).toBe(1);
+});
+
 test('mobile viewport keeps canvas playable with touch controls outside portrait play area', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?play=1&sound=off');

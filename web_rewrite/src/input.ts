@@ -125,7 +125,10 @@ export function mountPointerControls(input: InputState, root: HTMLElement = docu
 
   const actions = document.createElement('div');
   actions.className = 'touch-actions';
-  actions.append(controlButton('SPACE', 'Space', input, 'touch-space'));
+  actions.append(
+    controlButton('ESC', 'Escape', input, 'touch-esc'),
+    controlButton('SPACE', 'Space', input, 'touch-space'),
+  );
 
   controls.append(pad, actions);
   root.append(controls);
@@ -159,12 +162,15 @@ function controlButton(label: string, code: string, input: InputState, className
       }
     }
     input.pressVirtual(code);
+    // Menus and the map editor listen for keyboard events, so on-screen buttons emit them too.
+    window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true }));
     button.classList.add('is-pressed');
   };
   const release = (event: PointerEvent) => {
     event.preventDefault();
     if (event.pointerId !== undefined && button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
     input.releaseVirtual(code);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
     button.classList.remove('is-pressed');
   };
 

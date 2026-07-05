@@ -117,6 +117,59 @@ export class MainMenu {
     this.screen = initialActive ? 'main' : needsTeam(mode, game.localPlayer.team) ? 'team' : 'main';
     this.active = initialActive || this.screen === 'team';
     window.addEventListener('keydown', (event) => this.onKey(event));
+    canvas.addEventListener('pointerdown', (event) => this.onPointer(event));
+  }
+
+  private onPointer(event: PointerEvent): void {
+    if (!this.active || this.editorHost?.active) return;
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+    const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
+    event.preventDefault();
+
+    if (this.screen === 'help' || this.screen === 'credits') {
+      this.screen = 'main';
+      this.selected = 0;
+      return;
+    }
+    if (this.screen === 'map-editor-help') {
+      this.screen = 'map-editor';
+      this.selected = 3;
+      return;
+    }
+    if (this.screen === 'main' || this.screen === 'mode' || this.screen === 'map-editor' || this.screen === 'team' || this.screen === 'pause') {
+      const index = Math.floor((y - 58) / 20);
+      if (index >= 0 && index < this.items().length && y >= 58 + index * 20 && y < 58 + index * 20 + 20) {
+        this.selected = index;
+        this.choose();
+      }
+      return;
+    }
+    if (this.screen === 'level') {
+      const index = gridIndexAt(x, y, GRID_ITEM_SIZE + 20 + GRID_MARGIN);
+      if (index >= 0 && index < this.levelItems.length) {
+        this.selected = index;
+        this.startLevel(this.levelItems[index]);
+      }
+      return;
+    }
+    if (this.screen === 'map-editor-open' || this.screen === 'map-editor-download') {
+      const index = gridIndexAt(x, y, GRID_ITEM_SIZE + 25 + GRID_MARGIN);
+      if (index >= 0 && index < this.mapItems.length) {
+        this.selected = index;
+        if (this.screen === 'map-editor-open') this.openInEditor(this.mapItems[index]);
+        else this.downloadMap(this.mapItems[index]);
+      }
+      return;
+    }
+    if (this.screen === 'join') {
+      const index = Math.floor((y - 73) / 15);
+      if (index >= 0 && index < this.joinRooms.length) {
+        this.selected = index;
+        this.joinRoom(this.joinRooms[index].room, this.joinRooms[index]);
+      }
+    }
   }
 
   render(): void {
@@ -824,6 +877,15 @@ function titleCharForKey(event: KeyboardEvent): string | undefined {
   if (/^(Digit|Numpad)\d$/.test(code)) return code.slice(-1);
   if (code === 'Minus') return event.shiftKey ? '_' : '-';
   return undefined;
+}
+
+function gridIndexAt(x: number, y: number, rowStep: number): number {
+  const col = Math.floor((x - GRID_X) / (GRID_ITEM_SIZE + GRID_MARGIN));
+  if (col < 0 || col >= GRID_COLUMNS) return -1;
+  if (x - GRID_X - col * (GRID_ITEM_SIZE + GRID_MARGIN) > GRID_ITEM_SIZE) return -1;
+  const row = Math.floor((y - GRID_Y) / rowStep);
+  if (row < 0 || y - GRID_Y - row * rowStep > GRID_ITEM_SIZE + 20) return -1;
+  return row * GRID_COLUMNS + col;
 }
 
 function levelDisplayName(level: string): string {

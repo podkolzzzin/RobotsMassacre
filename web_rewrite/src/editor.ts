@@ -309,6 +309,23 @@ export class MapEditor {
     if (code === 'KeyQ') this.previewHeld = false;
   }
 
+  onPointerDown(x: number, y: number): void {
+    if (this.askerVisible || this.previewHeld) return;
+    const boxX = Math.floor((this.canvas.width - 350) / 2);
+    const boxY = this.canvas.height - 55;
+    if (y >= boxY && y < boxY + 50) {
+      const index = Math.floor((x - boxX + 3) / 35);
+      if (index >= 0 && index < 10) this.selectBrush(index);
+      return;
+    }
+    if (y < HEADER_HEIGHT || y >= HEADER_HEIGHT + this.displayHeight) return;
+    const cellX = this.tileOffsetX + Math.floor((x - this.mapOffsetX()) / TILE_SIZE);
+    const cellY = this.tileOffsetY + Math.floor((y - HEADER_HEIGHT) / TILE_SIZE);
+    if (cellX < 0 || cellY < 0 || cellX >= this.cells.width || cellY >= this.cells.height) return;
+    this.anchorX = this.cursorX = cellX;
+    this.anchorY = this.cursorY = cellY;
+  }
+
   private handleAskerKey(event: KeyboardEvent): void {
     const { code } = event;
     if (code === 'ArrowLeft' || code === 'KeyA') this.askerSelected = (this.askerSelected + ASKER_OPTIONS.length - 1) % ASKER_OPTIONS.length;
@@ -785,6 +802,16 @@ export class EditorHost {
       this.editor.onKeyUp(event.code);
     });
     window.addEventListener('blur', () => this.keysDown.clear());
+    canvas.addEventListener('pointerdown', (event) => {
+      if (!this.active || !this.editor) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      event.preventDefault();
+      this.editor.onPointerDown(
+        (event.clientX - rect.left) * (canvas.width / rect.width),
+        (event.clientY - rect.top) * (canvas.height / rect.height),
+      );
+    });
   }
 
   create(options: CreateMapOptions): void {
