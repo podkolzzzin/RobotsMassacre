@@ -129,7 +129,9 @@ class WorkerSignal implements SignalTransport {
 
   constructor(room: string, id: string, onMessage: (message: SignalMessage) => void) {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    this.socket = new WebSocket(`${proto}://${location.host}/room/${encodeURIComponent(room)}?id=${encodeURIComponent(id)}`);
+    const meta = currentMeta();
+    const query = `id=${encodeURIComponent(id)}&mode=${encodeURIComponent(meta.mode)}&level=${encodeURIComponent(meta.level)}`;
+    this.socket = new WebSocket(`${proto}://${location.host}/room/${encodeURIComponent(room)}?${query}`);
     this.socket.onopen = () => {
       for (const message of this.queue.splice(0)) this.socket.send(JSON.stringify(message));
     };

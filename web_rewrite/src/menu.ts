@@ -60,8 +60,15 @@ const CREATE_FORM_LABELS = ['title: ', 'base: ', 'mode: ', 'width: ', 'height: '
 const SETTINGS_OPTIONS_Y = [60, 175, 195];
 const DIMENSIONS: Array<[number, number]> = [[640, 480], [800, 600], [960, 600]];
 const MAX_PLAYER_NAME = 16;
-type MenuScreen = 'main' | 'mode' | 'level' | 'join' | 'team' | 'pause' | 'help' | 'credits' | 'settings'
+type MenuScreen = 'main' | 'mode' | 'level' | 'join' | 'join-code' | 'team' | 'pause' | 'help' | 'credits' | 'settings'
   | 'map-editor' | 'map-editor-help' | 'map-editor-create' | 'map-editor-open' | 'map-editor-download';
+
+interface RoomListItem {
+  room: string;
+  players: number;
+  mode: string;
+  level: string;
+}
 
 interface LevelGridItem {
   name: string;
@@ -95,6 +102,8 @@ export class MainMenu {
   private joinCode = '';
   private mapItems: MapGridItem[] = [];
   private createForm: CreateFormState = { title: '', base: 0, mode: 0, width: MIN_MAP_SIZE, height: MIN_MAP_SIZE, focus: 0 };
+  private joinRooms: RoomListItem[] = [];
+  private joinStatus: 'loading' | 'ready' | 'error' = 'loading';
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -153,6 +162,12 @@ export class MainMenu {
       return;
     }
     if (this.screen === 'join') {
+      writeCentered(ctx, this.assets, title, 2, 28, this.canvas.width);
+      this.renderRoomList();
+      writeCentered(ctx, this.assets, 'enter to join / c to enter a code / r to refresh / esc to back', 1, this.canvas.height - 20, this.canvas.width);
+      return;
+    }
+    if (this.screen === 'join-code') {
       writeCentered(ctx, this.assets, title, 2, 28, this.canvas.width);
       writeCentered(ctx, this.assets, `enter room: ${this.joinCode}-`, 1, 60, this.canvas.width);
       return;
@@ -213,7 +228,11 @@ export class MainMenu {
       return;
     }
     if (this.screen === 'join') {
-      this.onJoinKey(event);
+      this.onJoinListKey(event);
+      return;
+    }
+    if (this.screen === 'join-code') {
+      this.onJoinCodeKey(event);
       return;
     }
     const items = this.items();
@@ -266,8 +285,7 @@ export class MainMenu {
         this.screen = 'mode';
         this.selected = 0;
       } else if (this.selected === 1) {
-        this.screen = 'join';
-        this.joinCode = '';
+        this.openJoinList();
       } else if (this.selected === 2) {
         this.screen = 'map-editor';
         this.selected = 0;
@@ -372,23 +390,94 @@ export class MainMenu {
     location.search = params.toString();
   }
 
-  private onJoinKey(event: KeyboardEvent): void {
-    if (event.code === 'Escape') {
+  private openJoinList(): void {
+    this.screen = 'join';
+    this.selected = 0;
+    this.joinRooms = [];
+    this.joinStatus = 'loading';
+    void fetch('/rooms')
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('Failed to load rooms'))))
+      .then((data: { rooms?: RoomListItem[] }) => {
+        this.joinRooms = data.rooms ?? [];
+        this.joinStatus = 'ready';
+        this.selected = 0;
+      })
+      .catch(() => {
+        this.joinStatus = 'error';
+      });
+  }
+
+  private onJoinListKey(event: KeyboardEvent): void {
+    const { code } = event;
+    if (code === 'Escape') {
       this.screen = 'main';
       this.selected = 1;
-    } else if (event.code === 'Enter') {
-      if (this.joinCode.length > 0) {
-        const params = new URLSearchParams(location.search);
-        params.set('room', this.joinCode);
-        params.set('play', '1');
-        location.search = params.toString();
-      }
-    } else if (event.code === 'Backspace') {
-      this.joinCode = this.joinCode.slice(0, -1);
-    } else if (/^[a-z0-9-]$/.test(event.key.toLowerCase()) && this.joinCode.length < 15) {
-      this.joinCode += event.key.toLowerCase();
+    } else if (code === 'KeyC') {
+      this.screen = 'join-code';
+      this.joinCode = '';
+    } else if (code === 'KeyR') {
+      this.openJoinList();
+    } else if (code === 'ArrowDown' || code === 'KeyS') {
+      if (this.joinRooms.length > 0) this.selected = (this.selected + 1) % this.joinRooms.length;
+    } else if (code === 'ArrowUp' || code === 'KeyW') {
+      if (this.joinRooms.length > 0) this.selected = (this.selected + this.joinRooms.length - 1) % this.joinRooms.length;
+    } else if (code === 'Enter' || code === 'Space') {
+      const room = this.joinRooms[this.selected];
+      if (room) this.joinRoom(room.room, room);
+    } else {
+      return;
     }
     event.preventDefault();
+  }
+
+  private onJoinCodeKey(event: KeyboardEvent): void {
+    if (event.code === 'Escape') {
+      this.openJoinList();
+    } else if (event.code === 'Enter') {
+      if (this.joinCode.length > 0) this.joinRoom(this.joinCode);
+    } else if (event.code === 'Backspace') {
+      this.joinCode = this.joinCode.slice(0, -1);
+    } else if (this.joinCode.length < 15) {
+      const char = titleCharForKey(event);
+      if (char && char !== '_') this.joinCode += char;
+    }
+    event.preventDefault();
+  }
+
+  private joinRoom(room: string, meta?: RoomListItem): void {
+    const params = new URLSearchParams(location.search);
+    params.set('room', room);
+    params.set('play', '1');
+    if (meta) {
+      params.set('mode', meta.mode);
+      if (meta.level) params.set('level', meta.level);
+    }
+    location.search = params.toString();
+  }
+
+  private renderRoomList(): void {
+    const { ctx, assets } = this;
+    if (this.joinStatus === 'loading') {
+      writeCentered(ctx, assets, 'looking for rooms...', 1, 60, this.canvas.width);
+      return;
+    }
+    if (this.joinStatus === 'error') {
+      writeCentered(ctx, assets, 'room list is unavailable', 1, 60, this.canvas.width);
+      writeCentered(ctx, assets, 'press c to join with a room code', 1, 75, this.canvas.width);
+      return;
+    }
+    if (this.joinRooms.length === 0) {
+      writeCentered(ctx, assets, 'no open rooms found', 1, 60, this.canvas.width);
+      writeCentered(ctx, assets, 'press r to refresh or c to join with a code', 1, 75, this.canvas.width);
+      return;
+    }
+    writeCentered(ctx, assets, `room          players  mode  level`, 1, 55, this.canvas.width);
+    for (let i = 0; i < this.joinRooms.length; i += 1) {
+      const room = this.joinRooms[i];
+      const line = `${room.room.padEnd(12)}  ${String(room.players).padEnd(7)}  ${room.mode.padEnd(4)}  ${levelDisplayName(room.level)}`;
+      const label = i === this.selected ? `> ${line} <` : `  ${line}  `;
+      writeCentered(ctx, assets, label, 1, 75 + i * 15, this.canvas.width);
+    }
   }
 
   private onSettingsKey(event: KeyboardEvent): void {
@@ -658,7 +747,7 @@ export class MainMenu {
     if (this.screen === 'main') return 'robots massacre';
     if (this.screen === 'mode') return 'select game mode';
     if (this.screen === 'level') return 'select level';
-    if (this.screen === 'join') return 'join game';
+    if (this.screen === 'join' || this.screen === 'join-code') return 'join game';
     if (this.screen === 'pause') return 'paused';
     if (this.screen === 'help') return 'how to play';
     if (this.screen === 'credits') return 'credits';
@@ -735,6 +824,12 @@ function titleCharForKey(event: KeyboardEvent): string | undefined {
   if (/^(Digit|Numpad)\d$/.test(code)) return code.slice(-1);
   if (code === 'Minus') return event.shiftKey ? '_' : '-';
   return undefined;
+}
+
+function levelDisplayName(level: string): string {
+  if (!level) return '?';
+  const base = level.slice(level.lastIndexOf('/') + 1);
+  return base.replace(/\.rmm$/i, '');
 }
 
 function clampSize(value: number): number {

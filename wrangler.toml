@@ -1,9 +1,14 @@
 name = "robots-massacre-web-rewrite"
-main = "worker/signaling.ts"
+main = "web_rewrite/worker/signaling.ts"
 compatibility_date = "2026-07-04"
 
+[build]
+command = "npm install && npm run build"
+cwd = "web_rewrite"
+watch_dir = "web_rewrite"
+
 [assets]
-directory = "./dist"
+directory = "./web_rewrite/dist"
 binding = "ASSETS"
 
 [[durable_objects.bindings]]

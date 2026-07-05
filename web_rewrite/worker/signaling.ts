@@ -3,9 +3,16 @@ declare class WebSocketPair {
   1: WebSocket;
 }
 
+interface DurableObjectStorage {
+  put(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  list<T>(): Promise<Map<string, T>>;
+}
+
 interface DurableObjectState {
   acceptWebSocket(socket: WebSocket): void;
   getWebSockets(): WebSocket[];
+  storage: DurableObjectStorage;
 }
 
 interface DurableObjectNamespace<T> {
@@ -16,7 +23,7 @@ interface DurableObjectNamespace<T> {
 interface DurableObjectId {}
 
 interface DurableObjectStub<T> {
-  fetch(request: Request): Promise<Response>;
+  fetch(request: Request | string, init?: RequestInit): Promise<Response>;
 }
 
 interface Fetcher {
@@ -37,11 +44,32 @@ interface WebSocket {
 export interface Env {
   ASSETS: Fetcher;
   ROOMS: DurableObjectNamespace<RoomObject>;
+  LOBBY: DurableObjectNamespace<LobbyObject>;
 }
+
+interface SocketAttachment {
+  id: string;
+  room: string;
+  mode: string;
+  level: string;
+}
+
+export interface RoomEntry {
+  room: string;
+  players: number;
+  mode: string;
+  level: string;
+  updatedAt: number;
+}
+
+const ROOM_TTL_MS = 10 * 60 * 1000;
 
 export default {
   fetch(request: Request, env: Env): Response | Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/rooms') {
+      return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request);
+    }
     if (url.pathname.startsWith('/room/')) {
       const roomName = url.pathname.slice('/room/'.length) || 'default';
       const id = env.ROOMS.idFromName(roomName);
@@ -54,28 +82,35 @@ export default {
 export class RoomObject {
   private readonly sockets = new Map<string, WebSocket>();
 
-  constructor(private readonly state: DurableObjectState) {
+  constructor(private readonly state: DurableObjectState, private readonly env: Env) {
     this.state.getWebSockets().forEach((socket) => {
-      const id = socket.deserializeAttachment() as string | undefined;
-      if (id) this.sockets.set(id, socket);
+      const attachment = readAttachment(socket);
+      if (attachment) this.sockets.set(attachment.id, socket);
     });
   }
 
   fetch(request: Request): Response {
     const url = new URL(request.url);
     const id = url.searchParams.get('id') ?? crypto.randomUUID();
+    const attachment: SocketAttachment = {
+      id,
+      room: url.pathname.slice('/room/'.length) || 'default',
+      mode: url.searchParams.get('mode') ?? 'dm',
+      level: url.searchParams.get('level') ?? '',
+    };
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];
     this.state.acceptWebSocket(server);
-    server.serializeAttachment(id);
+    server.serializeAttachment(attachment);
     this.sockets.set(id, server);
     this.broadcast({ type: 'join', id }, id);
+    void this.reportToLobby();
     return new Response(null, { status: 101, webSocket: client } as WebSocketResponseInit);
   }
 
   webSocketMessage(socket: WebSocket, message: string): void {
-    const sender = socket.deserializeAttachment() as string | undefined;
+    const sender = readAttachment(socket)?.id;
     if (!sender) return;
     const parsed = JSON.parse(message) as { to?: string };
     if (parsed.to && this.sockets.has(parsed.to)) {
@@ -101,7 +136,52 @@ export class RoomObject {
   }
 
   private drop(socket: WebSocket): void {
-    const id = socket.deserializeAttachment() as string | undefined;
-    if (id) this.sockets.delete(id);
+    const attachment = readAttachment(socket);
+    if (attachment) this.sockets.delete(attachment.id);
+    void this.reportToLobby(attachment);
   }
+
+  private async reportToLobby(dropped?: SocketAttachment): Promise<void> {
+    const first = [...this.sockets.values()].map(readAttachment).find((attachment) => attachment) ?? dropped;
+    if (!first) return;
+    const entry: RoomEntry = {
+      room: first.room,
+      players: this.sockets.size,
+      mode: first.mode,
+      level: first.level,
+      updatedAt: Date.now(),
+    };
+    await this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby')).fetch('https://lobby/update', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    });
+  }
+}
+
+export class LobbyObject {
+  constructor(private readonly state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    if (request.method === 'POST') {
+      const entry = (await request.json()) as RoomEntry;
+      if (!entry.room) return new Response(null, { status: 400 });
+      if (entry.players > 0) await this.state.storage.put(`room:${entry.room}`, entry);
+      else await this.state.storage.delete(`room:${entry.room}`);
+      return new Response(null, { status: 204 });
+    }
+    const entries = await this.state.storage.list<RoomEntry>();
+    const now = Date.now();
+    const rooms = [...entries.values()]
+      .filter((entry) => entry.players > 0 && now - entry.updatedAt < ROOM_TTL_MS)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    return new Response(JSON.stringify({ rooms }), { headers: { 'content-type': 'application/json' } });
+  }
+}
+
+// Older sockets carried a plain string id; newer ones carry the full attachment.
+function readAttachment(socket: WebSocket): SocketAttachment | undefined {
+  const value = socket.deserializeAttachment();
+  if (typeof value === 'string') return { id: value, room: '', mode: 'dm', level: '' };
+  if (typeof value === 'object' && value !== null && 'id' in value) return value as SocketAttachment;
+  return undefined;
 }
