@@ -8,7 +8,7 @@ interface GameWindow {
 async function openSettings(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => (window as GameWindow).menu?.active)).toBe(true);
-  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowDown');
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => (window as GameWindow).menu?.screen)).toBe('settings');
 }

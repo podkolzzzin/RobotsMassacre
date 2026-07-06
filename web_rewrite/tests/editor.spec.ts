@@ -25,6 +25,7 @@ async function openCreateForm(page: import('@playwright/test').Page): Promise<vo
   await expect.poll(() => page.evaluate(() => (window as EditorWindow).menu?.active)).toBe(true);
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect.poll(() => page.evaluate(() => (window as EditorWindow).menu?.screen)).toBe('map-editor');
   await page.keyboard.press('Enter');
@@ -186,6 +187,7 @@ test('escape asks to save before exiting back to the menu', async ({ page }) => 
 test('bundled maps open in the editor from the open map screen', async ({ page }) => {
   await page.goto('/');
   await expect.poll(() => page.evaluate(() => (window as EditorWindow).menu?.active)).toBe(true);
+  await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');

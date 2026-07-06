@@ -5,7 +5,7 @@ import { createThumbnail } from './level';
 import { listLocalMaps, loadGameStats, loadLocalMap, localMapPath, saveGameSettings } from './storage';
 import type { Team } from './types';
 
-const MENU_ITEMS = ['create game', 'join game', 'map editor', 'settings', 'how to play', 'credits', 'quit'];
+const MENU_ITEMS = ['create game', 'join game', 'leaderboard', 'map editor', 'settings', 'how to play', 'credits', 'quit'];
 const MODE_ITEMS = ['deathmatch', 'team deathmatch', 'capture the flag'];
 const MAP_EDITOR_ITEMS = ['Create map', 'Open map', 'Download map', 'How to use'];
 const TEAM_ITEMS: Team[] = ['red', 'blu'];
@@ -60,7 +60,7 @@ const CREATE_FORM_LABELS = ['title: ', 'base: ', 'mode: ', 'width: ', 'height: '
 const SETTINGS_OPTIONS_Y = [60, 175, 195];
 const DIMENSIONS: Array<[number, number]> = [[640, 480], [800, 600], [960, 600]];
 const MAX_PLAYER_NAME = 16;
-type MenuScreen = 'main' | 'mode' | 'level' | 'join' | 'join-code' | 'team' | 'pause' | 'help' | 'credits' | 'settings'
+type MenuScreen = 'main' | 'mode' | 'level' | 'join' | 'join-code' | 'team' | 'pause' | 'help' | 'credits' | 'settings' | 'leaderboard'
   | 'map-editor' | 'map-editor-help' | 'map-editor-create' | 'map-editor-open' | 'map-editor-download';
 
 interface RoomListItem {
@@ -104,6 +104,8 @@ export class MainMenu {
   private createForm: CreateFormState = { title: '', base: 0, mode: 0, width: MIN_MAP_SIZE, height: MIN_MAP_SIZE, focus: 0 };
   private joinRooms: RoomListItem[] = [];
   private joinStatus: 'loading' | 'ready' | 'error' = 'loading';
+  private leaderboard: { name: string; kills: number }[] = [];
+  private leaderboardStatus: 'loading' | 'ready' | 'error' = 'loading';
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -225,6 +227,12 @@ export class MainMenu {
       writeCentered(ctx, this.assets, `enter room: ${this.joinCode}-`, 1, 60, this.canvas.width);
       return;
     }
+    if (this.screen === 'leaderboard') {
+      writeCentered(ctx, this.assets, title, 2, 20, this.canvas.width);
+      this.renderLeaderboard();
+      writeCentered(ctx, this.assets, 'r to refresh / esc to back', 1, this.canvas.height - 20, this.canvas.width);
+      return;
+    }
 
     const items = this.items();
     writeCentered(ctx, this.assets, title, 2, 28, this.canvas.width);
@@ -288,6 +296,17 @@ export class MainMenu {
       this.onJoinCodeKey(event);
       return;
     }
+    if (this.screen === 'leaderboard') {
+      if (event.code === 'Escape') {
+        this.screen = 'main';
+        this.selected = 0;
+        event.preventDefault();
+      } else if (event.code === 'KeyR') {
+        this.openLeaderboard();
+        event.preventDefault();
+      }
+      return;
+    }
     const items = this.items();
     if (event.code === 'Escape') {
       if (this.screen === 'pause') this.active = false;
@@ -340,14 +359,16 @@ export class MainMenu {
       } else if (this.selected === 1) {
         this.openJoinList();
       } else if (this.selected === 2) {
+        this.openLeaderboard();
+      } else if (this.selected === 3) {
         this.screen = 'map-editor';
         this.selected = 0;
       } else if (this.selected === 4) {
-        this.screen = 'help';
-      } else if (this.selected === 5) {
-        this.screen = 'credits';
-      } else if (this.selected === 3) {
         this.screen = 'settings';
+      } else if (this.selected === 5) {
+        this.screen = 'help';
+      } else if (this.selected === 6) {
+        this.screen = 'credits';
       } else {
         window.close();
         // window.close() is ignored for tabs the user opened; leave the game either way.
@@ -531,6 +552,47 @@ export class MainMenu {
       const line = `${room.room.slice(0, 8).padEnd(8)} ${String(room.players).padStart(2)} ${room.mode.padEnd(4)} ${levelDisplayName(room.level).slice(0, 12).padEnd(12)}`;
       const label = i === this.selected ? `> ${line} <` : `  ${line}  `;
       writeCentered(ctx, assets, label, 1, 75 + i * 15, this.canvas.width);
+    }
+  }
+
+  private openLeaderboard(): void {
+    this.screen = 'leaderboard';
+    this.selected = 0;
+    this.leaderboard = [];
+    this.leaderboardStatus = 'loading';
+    void fetch('/leaderboard')
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error('Failed to load leaderboard'))))
+      .then((data: { leaderboard?: { name: string; kills: number }[] }) => {
+        this.leaderboard = data.leaderboard ?? [];
+        this.leaderboardStatus = 'ready';
+      })
+      .catch(() => {
+        this.leaderboardStatus = 'error';
+      });
+  }
+
+  private renderLeaderboard(): void {
+    const { ctx, assets } = this;
+    if (this.leaderboardStatus === 'loading') {
+      writeCentered(ctx, assets, 'loading...', 1, 55, this.canvas.width);
+      return;
+    }
+    if (this.leaderboardStatus === 'error') {
+      writeCentered(ctx, assets, 'leaderboard is unavailable', 1, 55, this.canvas.width);
+      return;
+    }
+    if (this.leaderboard.length === 0) {
+      writeCentered(ctx, assets, 'no entries yet', 1, 55, this.canvas.width);
+      return;
+    }
+    const nameColX = Math.round((this.canvas.width - 160) / 2);
+    const killsColX = nameColX + 120;
+    writeFont(ctx, assets, 'name', 1, nameColX, 47);
+    writeFont(ctx, assets, 'kills', 1, killsColX, 47);
+    for (let i = 0; i < this.leaderboard.length; i += 1) {
+      const entry = this.leaderboard[i];
+      writeFont(ctx, assets, entry.name, 1, nameColX, 60 + i * 12);
+      writeFont(ctx, assets, `${entry.kills}`, 1, killsColX, 60 + i * 12);
     }
   }
 
@@ -827,6 +889,7 @@ export class MainMenu {
     if (this.screen === 'help') return 'how to play';
     if (this.screen === 'credits') return 'credits';
     if (this.screen === 'settings') return 'settings';
+    if (this.screen === 'leaderboard') return 'leaderboard';
     if (this.screen === 'map-editor') return 'map editor';
     if (this.screen === 'map-editor-help') return 'Map editor help';
     if (this.screen === 'map-editor-create') return 'create map';
