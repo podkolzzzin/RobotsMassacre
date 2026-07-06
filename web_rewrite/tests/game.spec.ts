@@ -1043,6 +1043,60 @@ test('owned buildings render original focus cues and mine countdown', async ({ p
   expect(cues.countdown).toBeGreaterThan(8);
 });
 
+test('turrets render health indicator without building focus', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number; direction: number; carriedBuildingId?: string };
+      level: {
+        entities: Array<{
+          id?: string;
+          kind: string;
+          owner?: string;
+          x: number;
+          y: number;
+          solid: boolean;
+          health: number;
+          maxHealth: number;
+          removed: boolean;
+          direction?: number;
+          lastShot?: number;
+          skippedAnimTicks?: number;
+        }>;
+      };
+    } }).game!;
+    game.localPlayer.x = 40;
+    game.localPlayer.y = 40;
+    game.localPlayer.direction = 0;
+    game.localPlayer.carriedBuildingId = undefined;
+    game.level.entities = [{
+      id: 'unfocused-turret',
+      kind: 'turret',
+      owner: 'remote-owner',
+      x: 180,
+      y: 120,
+      solid: true,
+      health: 40,
+      maxHealth: 125,
+      removed: false,
+      direction: 0,
+      lastShot: performance.now(),
+      skippedAnimTicks: 0,
+    }];
+  });
+
+  await expect.poll(async () => page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const ctx = canvas.getContext('2d')!;
+    const data = ctx.getImageData(180, 150, 10, 4).data;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 180 && data[i + 1] < 80 && data[i + 2] < 80 && data[i + 3] > 0) count += 1;
+    }
+    return count;
+  })).toBeGreaterThan(8);
+});
+
 test('dispenser restores owner health and ammo with beam particles', async ({ page }) => {
   await page.goto(playUrl('/?sound=off'));
   await page.evaluate(() => {

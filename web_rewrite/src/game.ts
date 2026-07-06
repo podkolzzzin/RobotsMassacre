@@ -402,6 +402,7 @@ export class Game {
       return;
     }
     if (entity.kind === 'turret') {
+      this.renderBuildingHealthBar(entity);
       this.assets.graphics.drawHue(this.ctx, 0, 15, entity.x, entity.y, unitHue(entity.owner ?? ''), (entity.direction ?? Direction.Up) * Math.PI / 2);
       return;
     }
