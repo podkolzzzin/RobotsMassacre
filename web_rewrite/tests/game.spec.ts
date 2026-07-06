@@ -2889,3 +2889,84 @@ test('remote lethal hits sync death count and respawned health', async ({ browse
 
   await context.close();
 });
+
+test('respawn skips a spawner occupied by another player and uses the next one', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number; hp: number };
+      level: { entities: unknown[]; spawners: unknown[] };
+      upsertRemotePlayer: (state: unknown) => void;
+    } }).game!;
+    game.level.entities = [];
+    const spawner = (x: number, y: number) => ({ kind: 'spawner-red', x, y, solid: false, health: Number.POSITIVE_INFINITY, maxHealth: Number.POSITIVE_INFINITY, removed: false });
+    game.level.spawners = [spawner(120, 480), spawner(300, 480)];
+    game.upsertRemotePlayer({
+      id: 'spawn-camper',
+      x: 120,
+      y: 480,
+      hp: 100,
+      ammo: 75,
+      direction: 0,
+      moving: false,
+      shooting: false,
+      kills: 0,
+      deaths: 0,
+      name: 'Camper',
+    });
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.hp = 10;
+  });
+
+  await page.keyboard.press('KeyZ');
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; hp: number } } }).game!;
+    return { x: game.localPlayer.x, y: game.localPlayer.y, hp: game.localPlayer.hp };
+  })).toEqual({ x: 300, y: 480, hp: 100 });
+});
+
+test('respawn picks nearest free space when every spawner is occupied', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number; hp: number };
+      level: { entities: unknown[]; spawners: unknown[] };
+      upsertRemotePlayer: (state: unknown) => void;
+    } }).game!;
+    game.level.entities = [];
+    game.level.spawners = [{ kind: 'spawner-red', x: 120, y: 480, solid: false, health: Number.POSITIVE_INFINITY, maxHealth: Number.POSITIVE_INFINITY, removed: false }];
+    game.upsertRemotePlayer({
+      id: 'spawn-camper',
+      x: 120,
+      y: 480,
+      hp: 100,
+      ammo: 75,
+      direction: 0,
+      moving: false,
+      shooting: false,
+      kills: 0,
+      deaths: 0,
+      name: 'Camper',
+    });
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.hp = 10;
+  });
+
+  await page.keyboard.press('KeyZ');
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localId: string;
+      localPlayer: { x: number; y: number; hp: number };
+      players: Map<string, { x: number; y: number }>;
+    } }).game!;
+    const local = game.localPlayer;
+    const overlapsAnyone = [...game.players.entries()].some(([id, other]) => id !== game.localId
+      && local.x < other.x + 26 && local.x + 26 > other.x && local.y < other.y + 27 && local.y + 27 > other.y);
+    const distance = Math.hypot(local.x - 120, local.y - 480);
+    return { hp: local.hp, overlapsAnyone, nearSpawner: distance > 0 && distance <= 45 };
+  })).toEqual({ hp: 100, overlapsAnyone: false, nearSpawner: true });
+});

@@ -755,12 +755,33 @@ export class Game {
     player.currentInventoryKey = 1;
   }
 
-  private spawnForPlayer(player: PlayerState): StaticEntity | undefined {
-    if (player.team !== 'none') {
-      const teamSpawn = this.level.spawners.find((spawner) => flagTeam(spawner) === player.team);
-      if (teamSpawn) return teamSpawn;
+  private spawnForPlayer(player: PlayerState): { x: number; y: number } | undefined {
+    const teamSpawners = player.team === 'none' ? [] : this.level.spawners.filter((spawner) => flagTeam(spawner) === player.team);
+    const candidates = teamSpawners.length > 0 ? teamSpawners : this.level.spawners;
+    const free = candidates.find((spawner) => !this.blockedAt(player, spawner.x, spawner.y));
+    if (free) return free;
+    return this.freeSpaceNearSpawners(player, candidates) ?? candidates[0];
+  }
+
+  private freeSpaceNearSpawners(player: PlayerState, spawners: StaticEntity[]): { x: number; y: number } | undefined {
+    const maxRadius = Math.max(this.level.width, this.level.height);
+    for (let radius = 1; radius <= maxRadius; radius += 1) {
+      let best: { x: number; y: number; distance: number } | undefined;
+      for (const spawner of spawners) {
+        for (let dx = -radius; dx <= radius; dx += 1) {
+          for (let dy = -radius; dy <= radius; dy += 1) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+            const x = spawner.x + dx * TILE_SIZE;
+            const y = spawner.y + dy * TILE_SIZE;
+            if (this.blockedAt(player, x, y)) continue;
+            const distance = Math.hypot(dx, dy);
+            if (!best || distance < best.distance) best = { x, y, distance };
+          }
+        }
+      }
+      if (best) return { x: best.x, y: best.y };
     }
-    return this.level.spawners[0];
+    return undefined;
   }
 
   private isEnemy(ownerId: string | undefined, targetId: string | undefined): boolean {
