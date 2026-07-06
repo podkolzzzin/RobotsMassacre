@@ -175,7 +175,13 @@ export class Game {
       if (player.holdingFlag) {
         player.shooting = false;
       } else if (selectedItem && selectedItem.kind !== 'cannon') {
-        if (this.useInventoryItem(player, selectedItem)) this.input.suppressAttackUntilRelease();
+        if (this.useInventoryItem(player, selectedItem)) {
+          this.input.suppressAttackUntilRelease();
+          // Deploying starts the regular shot cooldown, so a habitual quick
+          // re-tap of the fire key cannot fire an accidental cannon shot when
+          // the selection auto-reverts to the cannon (issue #7).
+          this.lastShot = now;
+        }
       } else if (player.ammo > 0 && now - this.lastShot >= SHOT_DELAY) {
         this.lastShot = now;
         player.shooting = true;
