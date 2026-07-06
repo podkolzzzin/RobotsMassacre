@@ -1279,26 +1279,35 @@ test('mine counts down then damages nearby enemies with explosion particles', as
     game.particles.splice(0, game.particles.length);
   });
 
+  // The explosion appears first; the enemy revives only after the respawn delay.
   await expect.poll(async () => page.evaluate(() => {
     const game = (window as Window & { game?: {
-      players: Map<string, { hp: number; deaths: number }>;
       particles: Array<{ kind: string }>;
       level: { entities: Array<{ kind: string; removed: boolean; solid: boolean }> };
     } }).game!;
     const mine = game.level.entities.find((entity) => entity.kind === 'mine')!;
     return {
-      enemy: game.players.get('enemy'),
-      ally: game.players.get('ally'),
       removed: mine.removed,
       solid: mine.solid,
       hasExplosion: game.particles.some((particle) => particle.kind === 'mine-explosion'),
     };
   })).toMatchObject({
-    enemy: { hp: 100, deaths: 1 },
-    ally: { hp: 100, deaths: 0 },
     removed: true,
     solid: false,
     hasExplosion: true,
+  });
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      players: Map<string, { hp: number; deaths: number }>;
+    } }).game!;
+    return {
+      enemy: game.players.get('enemy'),
+      ally: game.players.get('ally'),
+    };
+  })).toMatchObject({
+    enemy: { hp: 100, deaths: 1 },
+    ally: { hp: 100, deaths: 0 },
   });
 });
 
@@ -2969,4 +2978,89 @@ test('respawn picks nearest free space when every spawner is occupied', async ({
     const distance = Math.hypot(local.x - 120, local.y - 480);
     return { hp: local.hp, overlapsAnyone, nearSpawner: distance > 0 && distance <= 45 };
   })).toEqual({ hp: 100, overlapsAnyone: false, nearSpawner: true });
+});
+
+test('respawn waits for remote positions and avoids a spawner claimed meanwhile', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number; hp: number };
+      level: { entities: unknown[]; spawners: unknown[] };
+    } }).game!;
+    game.level.entities = [];
+    const spawner = (x: number, y: number) => ({ kind: 'spawner-red', x, y, solid: false, health: Number.POSITIVE_INFINITY, maxHealth: Number.POSITIVE_INFINITY, removed: false });
+    game.level.spawners = [spawner(120, 480), spawner(300, 480)];
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.hp = 10;
+  });
+
+  await page.keyboard.press('KeyZ');
+
+  // The kill leaves the player dead in place instead of respawning instantly.
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; hp: number } } }).game!;
+    return { x: game.localPlayer.x, y: game.localPlayer.y, hp: game.localPlayer.hp };
+  })).toEqual({ x: 180, y: 180, hp: 0 });
+
+  // A remote update arrives after the death (network latency): someone now camps spawner 0.
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: { upsertRemotePlayer: (state: unknown) => void } }).game!;
+    game.upsertRemotePlayer({
+      id: 'late-camper',
+      x: 120,
+      y: 480,
+      hp: 100,
+      ammo: 75,
+      direction: 0,
+      moving: false,
+      shooting: false,
+      kills: 0,
+      deaths: 0,
+      name: 'Camper',
+    });
+  });
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number; hp: number } } }).game!;
+    return { x: game.localPlayer.x, y: game.localPlayer.y, hp: game.localPlayer.hp };
+  }), { timeout: 10_000 }).toEqual({ x: 300, y: 480, hp: 100 });
+});
+
+test('joining player relocates when late remote positions reveal an occupied spawn', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  // The local player spawned at spawners[0] knowing nothing about other players.
+  // Now the first remote update arrives: an established player stands exactly there.
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number };
+      level: { spawners: Array<{ x: number; y: number }> };
+      upsertRemotePlayer: (state: unknown) => void;
+    } }).game!;
+    const spawn = game.level.spawners[0];
+    game.upsertRemotePlayer({
+      id: 'earlier-player',
+      x: spawn.x,
+      y: spawn.y,
+      hp: 100,
+      ammo: 75,
+      direction: 0,
+      moving: false,
+      shooting: false,
+      kills: 0,
+      deaths: 0,
+      name: 'Veteran',
+    });
+  });
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number; hp: number };
+      players: Map<string, { x: number; y: number }>;
+    } }).game!;
+    const local = game.localPlayer;
+    const other = game.players.get('earlier-player')!;
+    const overlaps = local.x < other.x + 26 && local.x + 26 > other.x && local.y < other.y + 27 && local.y + 27 > other.y;
+    return { overlaps, hp: local.hp };
+  })).toEqual({ overlaps: false, hp: 100 });
 });

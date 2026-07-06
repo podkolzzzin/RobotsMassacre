@@ -35,6 +35,13 @@ const MINE_EXPLOSION_DELAY = 25;
 const MINE_MAX_DAMAGE = 100;
 const MINE_DAMAGE_DELTA = 5;
 const BONUS_KINDS: BonusKind[] = ['acceleration', 'ap-bullets', 'big-ammo', 'big-med', 'invulnerability', 'mine', 'small-ammo', 'small-med', 'turret', 'dispenser'];
+// Respawn is delayed so positions broadcast by other clients during the wait
+// are known before a spawn point is picked; the per-player jitter keeps two
+// clients that died simultaneously from choosing the same spot.
+const RESPAWN_DELAY_MS = 1000;
+const RESPAWN_JITTER_MS = 500;
+const SPAWN_SETTLE_MS = 10_000;
+const SETTLE_RECHECK_MS = 400;
 
 export class Game {
   readonly players = new Map<string, PlayerState>();
@@ -56,6 +63,10 @@ export class Game {
   private entityId = 0;
   private readonly consumedRemoteBullets = new Set<string>();
   private readonly consumedBonuses = new Set<string>();
+  private readonly pendingRespawns = new Map<string, number>();
+  private spawnSettleUntil = 0;
+  private movedSinceSpawn = false;
+  private settleRecheckAt: number | undefined;
   private readonly recentHits: Array<HitState & { ticks: number }> = [];
   private readonly recentBonusRemovals: Array<{ id: string; ticks: number }> = [];
 
@@ -87,6 +98,7 @@ export class Game {
       currentInventoryKey: 1,
       team: 'none',
     });
+    this.spawnSettleUntil = performance.now() + SPAWN_SETTLE_MS;
   }
 
   get localPlayer(): PlayerState {
@@ -97,21 +109,25 @@ export class Game {
 
   tick(now: number): void {
     const player = this.localPlayer;
+    this.updateRespawns(now);
+    this.recheckSpawnSettling(now);
+    const alive = player.hp > 0;
     this.updateWaterTiles();
     this.updateRecentHits();
     this.updateRecentBonusRemovals();
     this.updateBonuses();
     this.manageBonusGeneration();
     this.updatePickedBonuses(player, now);
-    this.pickUpBonuses(player, now);
+    if (alive) this.pickUpBonuses(player, now);
     this.updateBuildings();
     this.updateInventorySelection(player);
     this.updateCarriedBuilding(player);
-    const moveInput = this.getMoveInput();
+    const moveInput = alive ? this.getMoveInput() : { moving: false, x: 0, y: 0 };
     player.moving = moveInput.moving;
 
     if (moveInput.moving) {
       this.movePlayer(player, moveInput);
+      this.movedSinceSpawn = true;
       const maxSpeed = this.maxSpeed(player, now);
       if (this.speed < maxSpeed) this.speed = Math.min(maxSpeed, this.speed + SPEED_DELTA);
       if (this.skippedTrackTicks++ > 2) {
@@ -123,12 +139,14 @@ export class Game {
       this.trackState = 0;
     }
 
-    this.updateFlags(player);
-    this.updateBuildingInteraction(player);
+    if (alive) {
+      this.updateFlags(player);
+      this.updateBuildingInteraction(player);
+    }
     if (this.input.consumeSelfDamage()) this.damageSelf(player, 10);
 
     player.shooting = false;
-    if (this.input.consumeAttack()) {
+    if (this.input.consumeAttack() && alive) {
       const selectedItem = player.inventory.find((item) => item.activationKey === player.currentInventoryKey);
       if (player.holdingFlag) {
         player.shooting = false;
@@ -169,7 +187,7 @@ export class Game {
         continue;
       }
 
-      const hitPlayer = [...this.players.values()].find((target) => this.isEnemy(bullet.owner, target.id) && rectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, target.x, target.y, PLAYER_W, PLAYER_H));
+      const hitPlayer = [...this.players.values()].find((target) => target.hp > 0 && this.isEnemy(bullet.owner, target.id) && rectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, target.x, target.y, PLAYER_W, PLAYER_H));
       if (hitPlayer) {
         this.damagePlayer(hitPlayer, bullet.owner, bullet.ap ? BULLET_DAMAGE * 3 : BULLET_DAMAGE, bullet.id);
         if (bullet.owner === this.localId) this.localStats.hits += 1;
@@ -192,7 +210,13 @@ export class Game {
   }
 
   upsertRemotePlayer(state: PlayerState): void {
-    if (state.id !== this.localId) this.players.set(state.id, normalizePlayerState(state));
+    if (state.id === this.localId) return;
+    const player = normalizePlayerState(state);
+    this.players.set(state.id, player);
+    if (player.hp > 0) {
+      this.pendingRespawns.delete(player.id);
+      this.resolveSpawnCollision(player);
+    }
   }
 
   snapshot(): PlayerState {
@@ -296,6 +320,7 @@ export class Game {
   }
 
   private renderPlayer(player: PlayerState): void {
+    if (player.hp <= 0) return;
     const x = player.x - 2;
     const y = player.y - 2;
     const rotation = player.direction * Math.PI / 2;
@@ -683,7 +708,7 @@ export class Game {
         const [cw, ch] = entitySize(candidate);
         return candidate !== entity && !candidate.removed && rectsIntersect(entity.x, entity.y, w, h, candidate.x, candidate.y, cw, ch);
       })
-      || [...this.players.values()].some((other) => other.id !== player.id && rectsIntersect(entity.x, entity.y, w, h, other.x, other.y, PLAYER_W, PLAYER_H));
+      || [...this.players.values()].some((other) => other.id !== player.id && other.hp > 0 && rectsIntersect(entity.x, entity.y, w, h, other.x, other.y, PLAYER_W, PLAYER_H));
   }
 
   private consumeInventoryItem(player: PlayerState, item: InventoryItemState): void {
@@ -699,7 +724,7 @@ export class Game {
 
   private blockedAt(player: PlayerState, x: number, y: number): boolean {
     return this.solidAt(x, y, PLAYER_W, PLAYER_H)
-      || [...this.players.values()].some((other) => other.id !== player.id && rectsIntersect(x, y, PLAYER_W, PLAYER_H, other.x, other.y, PLAYER_W, PLAYER_H));
+      || [...this.players.values()].some((other) => other.id !== player.id && other.hp > 0 && rectsIntersect(x, y, PLAYER_W, PLAYER_H, other.x, other.y, PLAYER_W, PLAYER_H));
   }
 
   private solidAt(x: number, y: number, w: number, h: number): boolean {
@@ -715,6 +740,7 @@ export class Game {
   }
 
   private damagePlayer(player: PlayerState, ownerId: string, damage: number, hitId?: string): void {
+    if (player.hp <= 0) return;
     if (!this.isEnemy(ownerId, player.id)) return;
     if (this.hasActiveBonus(player, 'invulnerability', performance.now())) return;
     player.hp = Math.max(0, player.hp - damage);
@@ -722,11 +748,36 @@ export class Game {
       this.recentHits.push({ id: hitId, owner: ownerId, target: player.id, damage, ticks: HIT_BROADCAST_TICKS });
     }
     if (player.hp === 0) {
-      this.addRobotDebris(player);
-      this.stopHoldingFlag(player);
-      player.deaths += 1;
       const owner = this.players.get(ownerId);
       if (owner) owner.kills += 1;
+      this.killPlayer(player);
+    }
+  }
+
+  private damageSelf(player: PlayerState, damage: number): void {
+    if (player.hp <= 0) return;
+    if (this.hasActiveBonus(player, 'invulnerability', performance.now())) return;
+    player.hp = Math.max(0, player.hp - damage);
+    if (player.hp !== 0) return;
+    this.killPlayer(player);
+  }
+
+  // The dead player stays in place; the spawn point is picked only when the
+  // delay expires so coordinates received meanwhile from other clients count.
+  private killPlayer(player: PlayerState): void {
+    this.addRobotDebris(player);
+    this.stopHoldingFlag(player);
+    player.deaths += 1;
+    const jitter = hashString(player.id) % RESPAWN_JITTER_MS;
+    this.pendingRespawns.set(player.id, performance.now() + RESPAWN_DELAY_MS + jitter);
+  }
+
+  private updateRespawns(now: number): void {
+    for (const [id, respawnAt] of this.pendingRespawns) {
+      if (now < respawnAt) continue;
+      this.pendingRespawns.delete(id);
+      const player = this.players.get(id);
+      if (!player || player.hp > 0) continue;
       const spawn = this.spawnForPlayer(player);
       player.x = spawn?.x ?? TILE_SIZE;
       player.y = spawn?.y ?? TILE_SIZE;
@@ -735,24 +786,40 @@ export class Game {
       player.pickedBonuses = [];
       player.inventory = [inventoryItem('cannon')];
       player.currentInventoryKey = 1;
+      if (id === this.localId) {
+        this.movedSinceSpawn = false;
+        this.spawnSettleUntil = now + SPAWN_SETTLE_MS;
+      }
     }
   }
 
-  private damageSelf(player: PlayerState, damage: number): void {
-    if (this.hasActiveBonus(player, 'invulnerability', performance.now())) return;
-    player.hp = Math.max(0, player.hp - damage);
-    if (player.hp !== 0) return;
-    this.addRobotDebris(player);
-    this.stopHoldingFlag(player);
-    player.deaths += 1;
-    const spawn = this.spawnForPlayer(player);
-    player.x = spawn?.x ?? TILE_SIZE;
-    player.y = spawn?.y ?? TILE_SIZE;
-    player.hp = 100;
-    player.ammo = 75;
-    player.pickedBonuses = [];
-    player.inventory = [inventoryItem('cannon')];
-    player.currentInventoryKey = 1;
+  // While the local player sits on a fresh spawn, positions arriving late from
+  // other clients may reveal the spot was taken; the lower id relocates right
+  // away, the higher id waits a beat so two players never trade places forever.
+  private resolveSpawnCollision(other: PlayerState): void {
+    const local = this.players.get(this.localId);
+    if (!local || local.hp <= 0 || this.movedSinceSpawn) return;
+    if (performance.now() > this.spawnSettleUntil) return;
+    if (!rectsIntersect(local.x, local.y, PLAYER_W, PLAYER_H, other.x, other.y, PLAYER_W, PLAYER_H)) return;
+    if (this.localId < other.id) this.relocateSettlingPlayer(local);
+    else this.settleRecheckAt ??= performance.now() + SETTLE_RECHECK_MS;
+  }
+
+  private recheckSpawnSettling(now: number): void {
+    if (this.settleRecheckAt === undefined || now < this.settleRecheckAt) return;
+    this.settleRecheckAt = undefined;
+    const local = this.players.get(this.localId);
+    if (!local || local.hp <= 0 || this.movedSinceSpawn || now > this.spawnSettleUntil) return;
+    const overlapped = [...this.players.values()].some((other) => other.id !== this.localId && other.hp > 0
+      && rectsIntersect(local.x, local.y, PLAYER_W, PLAYER_H, other.x, other.y, PLAYER_W, PLAYER_H));
+    if (overlapped) this.relocateSettlingPlayer(local);
+  }
+
+  private relocateSettlingPlayer(local: PlayerState): void {
+    const spawn = this.spawnForPlayer(local);
+    if (!spawn) return;
+    local.x = spawn.x;
+    local.y = spawn.y;
   }
 
   private spawnForPlayer(player: PlayerState): { x: number; y: number } | undefined {
@@ -1553,6 +1620,12 @@ function normalizePlayerState(state: PlayerState): PlayerState {
     holdingFlag: state.holdingFlag,
     carriedBuildingId: state.carriedBuildingId,
   };
+}
+
+function hashString(value: string): number {
+  let result = 0;
+  for (let i = 0; i < value.length; i += 1) result = Math.imul(result ^ value.charCodeAt(i), 2654435761);
+  return (result ^ (result >>> 16)) >>> 0;
 }
 
 function hash(a: number, b: number, c: number, d: number): number {

@@ -193,11 +193,11 @@ test('inventory selection, building grab, flag drop and stats work from touch', 
   await page.locator('.drop-button').dispatchEvent('pointerup', { pointerId: 43, pointerType: 'touch', bubbles: true, cancelable: true });
   const afterDrop = await page.evaluate(() => {
     const game = (window as Window & { game?: GameHandle }).game!;
-    return { hp: game.localPlayer.hp, holdingFlag: game.localPlayer.holdingFlag ?? null };
+    return { holdingFlag: game.localPlayer.holdingFlag ?? null };
   });
-  // Respawned without the flag; hp depends on how many repeats landed after respawn.
   expect(afterDrop.holdingFlag).toBe(null);
-  expect(afterDrop.hp).toBeGreaterThan(0);
+  // The player revives once the respawn delay elapses.
+  await expect.poll(() => page.evaluate(() => (window as Window & { game?: GameHandle }).game!.localPlayer.hp), { timeout: 10_000 }).toBeGreaterThan(0);
   // ...and the DROP button disappears again.
   await expect.poll(async () => (await buttonDisplay()).drop).toBe('none');
 
