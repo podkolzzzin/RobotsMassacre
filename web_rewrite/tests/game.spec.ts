@@ -2090,6 +2090,67 @@ test('player gun sprites are tinted per original unit hue', async ({ page }) => 
   expect(samples[0]).not.toEqual(samples[1]);
 });
 
+test('player body sprites are tinted with team color in team mode', async ({ page }) => {
+  await page.goto(playUrl());
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { x: number; y: number };
+      upsertRemotePlayer: (state: unknown) => void;
+    } }).game!;
+    game.localPlayer.x = 120;
+    game.localPlayer.y = 120;
+    game.upsertRemotePlayer({
+      id: 'red-team-player',
+      x: 160,
+      y: 120,
+      hp: 100,
+      ammo: 75,
+      direction: 2,
+      moving: false,
+      shooting: false,
+      kills: 0,
+      deaths: 0,
+      name: 'RedP',
+      team: 'red',
+    });
+    game.upsertRemotePlayer({
+      id: 'blu-team-player',
+      x: 160,
+      y: 170,
+      hp: 100,
+      ammo: 75,
+      direction: 2,
+      moving: false,
+      shooting: false,
+      kills: 0,
+      deaths: 0,
+      name: 'BluP',
+      team: 'blu',
+    });
+  });
+  await page.waitForTimeout(80);
+
+  const samples = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const ctx = canvas.getContext('2d')!;
+    const findTeamColorPixel = (left: number, top: number) => {
+      const data = ctx.getImageData(left, top, 30, 30).data;
+      for (let i = 0; i < data.length; i += 4) {
+        const maxChannel = Math.max(data[i], data[i + 1], data[i + 2]);
+        if (data[i + 3] > 0 && maxChannel > 100 && maxChannel - Math.min(data[i], data[i + 1], data[i + 2]) > 50) {
+          return [data[i], data[i + 1], data[i + 2]];
+        }
+      }
+      return [0, 0, 0];
+    };
+    return [findTeamColorPixel(158, 118), findTeamColorPixel(158, 168)];
+  });
+
+  const [redPixel, bluPixel] = samples;
+  expect(redPixel[0]).toBeGreaterThan(redPixel[2]);
+  expect(bluPixel[2]).toBeGreaterThan(bluPixel[0]);
+});
+
 test('bullets damage and destroy brick walls', async ({ page }) => {
   await page.goto(playUrl('/?level=/levels/dm/destro.rmm&sound=off'));
   await page.evaluate(() => {

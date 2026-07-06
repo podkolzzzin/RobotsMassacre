@@ -301,7 +301,12 @@ export class Game {
     const selectedItem = player.inventory.find((item) => item.activationKey === player.currentInventoryKey);
     const carriedBuilding = player.carriedBuildingId ? this.level.entities.find((entity) => entity.id === player.carriedBuildingId) : undefined;
     const bodyRow = player.holdingFlag || carriedBuilding || (selectedItem?.kind !== undefined && selectedItem.kind !== 'cannon') ? 12 : 9;
-    this.assets.graphics.draw(this.ctx, 0, bodyRow + this.trackState, x, y, rotation);
+    const bodyHueDelta = teamBodyHue(player.team);
+    if (bodyHueDelta !== undefined) {
+      this.assets.graphics.drawHue(this.ctx, 0, bodyRow + this.trackState, x, y, bodyHueDelta, rotation);
+    } else {
+      this.assets.graphics.draw(this.ctx, 0, bodyRow + this.trackState, x, y, rotation);
+    }
     this.assets.graphics.drawHue(this.ctx, 1, 9, x + gunOffsetX(player.direction), y + gunOffsetY(player.direction), unitHue(player.id), rotation);
     if (player.holdingFlag) this.renderHeldFlag(player);
     else if (carriedBuilding) this.renderCarriedBuildingPreview(player, carriedBuilding);
@@ -1528,6 +1533,12 @@ function directionForVector(x: number, y: number): Direction | undefined {
   if (x > 0) return Direction.Right;
   if (y < 0) return Direction.Up;
   if (y > 0) return Direction.Down;
+  return undefined;
+}
+
+function teamBodyHue(team: Team): number | undefined {
+  if (team === 'red') return -210;
+  if (team === 'blu') return 30;
   return undefined;
 }
 
