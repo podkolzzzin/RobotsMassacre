@@ -197,11 +197,14 @@ export class Game {
 
     this.updateParticles();
 
+    const worldWidth = this.worldWidth();
+    const worldHeight = this.worldHeight();
+
     for (const bullet of this.bullets.values()) {
-      moveBullet(bullet);
+      moveBullet(bullet, worldWidth, worldHeight);
       const hitEntity = this.level.entities.find((entity) => {
         const [w, h] = entitySize(entity);
-        return !entity.removed && entity.solid && rectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, entity.x, entity.y, w, h);
+        return !entity.removed && entity.solid && torusRectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, entity.x, entity.y, w, h, worldWidth, worldHeight);
       });
       if (hitEntity) {
         this.playEntityHitSound(hitEntity);
@@ -211,13 +214,15 @@ export class Game {
         this.bullets.delete(bullet.id);
         continue;
       }
-      if (this.outsideWorld(bullet.x, bullet.y)) {
+      // The world wraps forever now instead of ending at an edge, so bullets
+      // need their own lifetime cap in place of the old "left the world" check.
+      if ((bullet.traveled ?? 0) >= Math.max(worldWidth, worldHeight)) {
         this.consumeBullet(bullet);
         this.bullets.delete(bullet.id);
         continue;
       }
 
-      const hitPlayer = [...this.players.values()].find((target) => target.hp > 0 && this.isEnemy(bullet.owner, target.id) && rectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, target.x, target.y, PLAYER_W, PLAYER_H));
+      const hitPlayer = [...this.players.values()].find((target) => target.hp > 0 && this.isEnemy(bullet.owner, target.id) && torusRectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, target.x, target.y, PLAYER_W, PLAYER_H, worldWidth, worldHeight));
       if (hitPlayer) {
         this.damagePlayer(hitPlayer, bullet.owner, bullet.ap ? BULLET_DAMAGE * 3 : BULLET_DAMAGE, bullet.id);
         if (bullet.owner === this.localId) this.localStats.hits += 1;
@@ -227,7 +232,7 @@ export class Game {
     }
 
     for (const bullet of this.bullets.values()) {
-      const hitBullet = [...this.bullets.values()].find((other) => other.id !== bullet.id && other.owner !== bullet.owner && rectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, other.x, other.y, BULLET_SIZE, BULLET_SIZE));
+      const hitBullet = [...this.bullets.values()].find((other) => other.id !== bullet.id && other.owner !== bullet.owner && torusRectsIntersect(bullet.x, bullet.y, BULLET_SIZE, BULLET_SIZE, other.x, other.y, BULLET_SIZE, BULLET_SIZE, worldWidth, worldHeight));
       if (hitBullet) {
         this.consumeBullet(bullet);
         this.consumeBullet(hitBullet);
@@ -328,7 +333,21 @@ export class Game {
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.save();
     ctx.translate(-Math.round(this.cameraX), -Math.round(this.cameraY));
+    this.renderWorld();
+    ctx.restore();
 
+    this.renderHud();
+    if (this.gameOver) {
+      this.renderStatistics();
+      writeCentered(ctx, this.assets, 'game over', 2, this.canvas.height - 60, this.canvas.width);
+      writeCentered(ctx, this.assets, 'press esc for menu', 1, this.canvas.height - 35, this.canvas.width);
+    } else if (this.input.down.has('Tab') || this.statsPinned) {
+      this.renderStatistics();
+    }
+  }
+
+  private renderWorld(): void {
+    const { ctx } = this;
     for (const tile of this.level.tiles) {
       if (tile.kind === 'empty') continue;
       const [sx, sy] = spriteForTile(tile.kind);
@@ -353,16 +372,6 @@ export class Game {
     }
     for (const particle of this.particles) this.renderParticle(particle);
     for (const player of this.players.values()) this.renderPlayer(player);
-
-    ctx.restore();
-    this.renderHud();
-    if (this.gameOver) {
-      this.renderStatistics();
-      writeCentered(ctx, this.assets, 'game over', 2, this.canvas.height - 60, this.canvas.width);
-      writeCentered(ctx, this.assets, 'press esc for menu', 1, this.canvas.height - 35, this.canvas.width);
-    } else if (this.input.down.has('Tab') || this.statsPinned) {
-      this.renderStatistics();
-    }
   }
 
   private renderPlayer(player: PlayerState): void {
@@ -657,8 +666,22 @@ export class Game {
     const length = Math.hypot(input.x, input.y) || 1;
     const dx = input.x / length * this.speed;
     const dy = input.y / length * this.speed;
-    if (dx !== 0 && !this.blockedAt(player, player.x + dx, player.y)) player.x += dx;
-    if (dy !== 0 && !this.blockedAt(player, player.x, player.y + dy)) player.y += dy;
+    if (dx !== 0) {
+      const nx = wrapCoord(player.x + dx, this.worldWidth());
+      if (!this.blockedAt(player, nx, player.y)) player.x = nx;
+    }
+    if (dy !== 0) {
+      const ny = wrapCoord(player.y + dy, this.worldHeight());
+      if (!this.blockedAt(player, player.x, ny)) player.y = ny;
+    }
+  }
+
+  private worldWidth(): number {
+    return this.level.width * TILE_SIZE;
+  }
+
+  private worldHeight(): number {
+    return this.level.height * TILE_SIZE;
   }
 
   private updateInventorySelection(player: PlayerState): void {
@@ -795,20 +818,23 @@ export class Game {
   }
 
   private blockedAt(player: PlayerState, x: number, y: number): boolean {
+    const worldWidth = this.worldWidth();
+    const worldHeight = this.worldHeight();
     return this.solidAt(x, y, PLAYER_W, PLAYER_H)
-      || [...this.players.values()].some((other) => other.id !== player.id && other.hp > 0 && rectsIntersect(x, y, PLAYER_W, PLAYER_H, other.x, other.y, PLAYER_W, PLAYER_H));
+      || [...this.players.values()].some((other) => other.id !== player.id && other.hp > 0
+        && torusRectsIntersect(x, y, PLAYER_W, PLAYER_H, other.x, other.y, PLAYER_W, PLAYER_H, worldWidth, worldHeight));
   }
 
+  // The world wraps at its edges (issue #6 / /goal: globe-style teleporting),
+  // so a rect near a seam can overlap something that appears on the opposite
+  // side once you cross it — torusRectsIntersect accounts for that.
   private solidAt(x: number, y: number, w: number, h: number): boolean {
-    if (x < 0 || y < 0 || x + w > this.level.width * TILE_SIZE || y + h > this.level.height * TILE_SIZE) return true;
+    const worldWidth = this.worldWidth();
+    const worldHeight = this.worldHeight();
     return this.level.entities.some((entity) => {
       const [ew, eh] = entitySize(entity);
-      return !entity.removed && entity.solid && rectsIntersect(x, y, w, h, entity.x, entity.y, ew, eh);
+      return !entity.removed && entity.solid && torusRectsIntersect(x, y, w, h, entity.x, entity.y, ew, eh, worldWidth, worldHeight);
     });
-  }
-
-  private outsideWorld(x: number, y: number): boolean {
-    return x <= 0 || y <= 0 || x >= this.level.width * TILE_SIZE || y >= this.level.height * TILE_SIZE;
   }
 
   private damagePlayer(player: PlayerState, ownerId: string, damage: number, hitId?: string): void {
@@ -1467,9 +1493,13 @@ export class Game {
     }
   }
 
+  // The world wraps at its edges (players and bullets teleport across a
+  // seam), but most levels are smaller than the viewport, so the camera
+  // still pins to the map like before rather than tiling it across the
+  // screen — crossing a seam is an instant cut, same as Pac-Man.
   private centerCamera(player: PlayerState): void {
-    this.cameraX = clamp(player.x + PLAYER_W / 2 - this.canvas.width / 2, 0, Math.max(0, this.level.width * TILE_SIZE - this.canvas.width));
-    this.cameraY = clamp(player.y + PLAYER_H / 2 - this.canvas.height / 2, 0, Math.max(0, this.level.height * TILE_SIZE - this.canvas.height));
+    this.cameraX = clamp(player.x + PLAYER_W / 2 - this.canvas.width / 2, 0, Math.max(0, this.worldWidth() - this.canvas.width));
+    this.cameraY = clamp(player.y + PLAYER_H / 2 - this.canvas.height / 2, 0, Math.max(0, this.worldHeight() - this.canvas.height));
   }
 }
 
@@ -1479,6 +1509,32 @@ function rectsIntersect(ax: number, ay: number, aw: number, ah: number, bx: numb
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function wrapCoord(value: number, size: number): number {
+  if (size <= 0) return value;
+  const wrapped = value % size;
+  return wrapped < 0 ? wrapped + size : wrapped;
+}
+
+// AABB overlap on a torus: the world connects its left/right and top/bottom
+// edges (globe-style teleporting), so a rect near one seam can overlap a rect
+// near the opposite seam. Checking the other rect at every wrapped copy
+// within one world-size of the original catches that without needing to
+// split either rect at the boundary.
+function torusRectsIntersect(
+  ax: number, ay: number, aw: number, ah: number,
+  bx: number, by: number, bw: number, bh: number,
+  worldWidth: number, worldHeight: number,
+): boolean {
+  const xOffsets = worldWidth > 0 ? [-worldWidth, 0, worldWidth] : [0];
+  const yOffsets = worldHeight > 0 ? [-worldHeight, 0, worldHeight] : [0];
+  for (const ox of xOffsets) {
+    for (const oy of yOffsets) {
+      if (rectsIntersect(ax, ay, aw, ah, bx + ox, by + oy, bw, bh)) return true;
+    }
+  }
+  return false;
 }
 
 function gunOffsetX(direction: Direction): number {
@@ -1704,12 +1760,15 @@ function hash(a: number, b: number, c: number, d: number): number {
   return (value ^ (value >>> 16)) >>> 0;
 }
 
-function moveBullet(bullet: BulletState): void {
+function moveBullet(bullet: BulletState, worldWidth: number, worldHeight: number): void {
   const speed = bullet.ap ? BULLET_SPEED * 1.5 : BULLET_SPEED;
   if (bullet.direction === Direction.Up) bullet.y -= speed;
   if (bullet.direction === Direction.Right) bullet.x += speed;
   if (bullet.direction === Direction.Down) bullet.y += speed;
   if (bullet.direction === Direction.Left) bullet.x -= speed;
+  bullet.traveled = (bullet.traveled ?? 0) + speed;
+  bullet.x = wrapCoord(bullet.x, worldWidth);
+  bullet.y = wrapCoord(bullet.y, worldHeight);
 }
 
 function directionForCode(code: string | undefined): Direction | undefined {

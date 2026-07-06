@@ -3315,3 +3315,119 @@ test('joining player relocates when late remote positions reveal an occupied spa
     return { overlaps, hp: local.hp };
   })).toEqual({ overlaps: false, hp: 100 });
 });
+
+test('player crossing the right edge teleports to the left edge', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  const worldWidth = await page.evaluate(() => {
+    const game = (window as Window & { game?: { level: { width: number; entities: unknown[] } } }).game!;
+    game.level.entities = [];
+    return game.level.width * 30;
+  });
+  await page.evaluate((ww) => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number } } }).game!;
+    game.localPlayer.x = ww - 3;
+    game.localPlayer.y = 300;
+  }, worldWidth);
+
+  await page.keyboard.down('KeyD');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyD');
+
+  const x = await page.evaluate(() => (window as Window & { game?: { localPlayer: { x: number } } }).game!.localPlayer.x);
+  expect(x).toBeGreaterThanOrEqual(0);
+  expect(x).toBeLessThan(worldWidth / 2);
+});
+
+test('player crossing the left edge teleports to the right edge', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  const worldWidth = await page.evaluate(() => {
+    const game = (window as Window & { game?: { level: { width: number; entities: unknown[] } } }).game!;
+    game.level.entities = [];
+    return game.level.width * 30;
+  });
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number } } }).game!;
+    game.localPlayer.x = 2;
+    game.localPlayer.y = 300;
+  });
+
+  await page.keyboard.down('KeyA');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyA');
+
+  const x = await page.evaluate(() => (window as Window & { game?: { localPlayer: { x: number } } }).game!.localPlayer.x);
+  expect(x).toBeGreaterThan(worldWidth / 2);
+});
+
+test('player crossing the bottom edge teleports to the top edge', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  const worldHeight = await page.evaluate(() => {
+    const game = (window as Window & { game?: { level: { height: number; entities: unknown[] } } }).game!;
+    game.level.entities = [];
+    return game.level.height * 30;
+  });
+  await page.evaluate((wh) => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number } } }).game!;
+    game.localPlayer.x = 300;
+    game.localPlayer.y = wh - 3;
+  }, worldHeight);
+
+  await page.keyboard.down('KeyS');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyS');
+
+  const y = await page.evaluate(() => (window as Window & { game?: { localPlayer: { y: number } } }).game!.localPlayer.y);
+  expect(y).toBeGreaterThanOrEqual(0);
+  expect(y).toBeLessThan(worldHeight / 2);
+});
+
+test('player crossing the top edge teleports to the bottom edge', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  const worldHeight = await page.evaluate(() => {
+    const game = (window as Window & { game?: { level: { height: number; entities: unknown[] } } }).game!;
+    game.level.entities = [];
+    return game.level.height * 30;
+  });
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { x: number; y: number } } }).game!;
+    game.localPlayer.x = 300;
+    game.localPlayer.y = 2;
+  });
+
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(400);
+  await page.keyboard.up('KeyW');
+
+  const y = await page.evaluate(() => (window as Window & { game?: { localPlayer: { y: number } } }).game!.localPlayer.y);
+  expect(y).toBeGreaterThan(worldHeight / 2);
+});
+
+test('bullet crossing the right edge wraps to the left edge instead of despawning', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  const worldWidth = await page.evaluate(() => {
+    const game = (window as Window & { game?: { level: { width: number; entities: unknown[] } } }).game!;
+    game.level.entities = [];
+    return game.level.width * 30;
+  });
+  await page.evaluate((ww) => {
+    const game = (window as Window & { game?: {
+      bullets: Map<string, { id: string; owner: string; x: number; y: number; direction: number; ap: boolean }>;
+      localId: string;
+    } }).game!;
+    game.bullets.clear();
+    game.bullets.set('wrap-test', { id: 'wrap-test', owner: game.localId, x: ww - 4, y: 300, direction: 1, ap: false });
+  }, worldWidth);
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: { bullets: Map<string, { x: number }> } }).game!;
+    const bullet = game.bullets.get('wrap-test');
+    return bullet ? bullet.x : null;
+  })).not.toBeNull();
+
+  const x = await page.evaluate(() => {
+    const game = (window as Window & { game?: { bullets: Map<string, { x: number }> } }).game!;
+    return game.bullets.get('wrap-test')!.x;
+  });
+  expect(x).toBeGreaterThanOrEqual(0);
+  expect(x).toBeLessThan(worldWidth / 2);
+});
