@@ -80,9 +80,11 @@ body[data-input-mode='editor'] .touch-controls {
 .joy-zone {
   position: fixed;
   left: 0;
-  top: 0;
+  /* Leave the top score strip and bottom HUD tappable (stats toggle, inventory). */
+  top: 26px;
   width: 62vw;
-  height: 100dvh;
+  height: calc(100vh - 76px);
+  height: calc(100dvh - 76px);
   display: none;
   pointer-events: auto;
   touch-action: none;
@@ -144,6 +146,38 @@ body[data-input-mode='game'] .fire-button.touch-button {
 
 body[data-input-mode='game'] .esc-button.touch-button,
 body[data-input-mode='menu'] .esc-button.touch-button {
+  display: block;
+}
+
+/* Contextual actions stacked above the fire button; each button only appears
+   while it has something to act on (flag held / building in reach). */
+.action-stack {
+  position: fixed;
+  right: calc(20px + env(safe-area-inset-right));
+  bottom: calc(42px + clamp(84px, 24vw, 112px) + env(safe-area-inset-bottom));
+  display: none;
+  flex-direction: column-reverse;
+  gap: 12px;
+  pointer-events: none;
+}
+
+body[data-input-mode='game'] .action-stack {
+  display: flex;
+}
+
+.grab-button.touch-button,
+.drop-button.touch-button {
+  width: clamp(64px, 18vw, 84px);
+  height: 44px;
+  border-radius: 8px;
+  display: none;
+}
+
+body.touch-can-grab .grab-button.touch-button {
+  display: block;
+}
+
+body.touch-holding-flag .drop-button.touch-button {
   display: block;
 }
 

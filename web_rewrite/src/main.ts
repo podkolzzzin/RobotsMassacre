@@ -76,10 +76,23 @@ async function main(): Promise<void> {
   new ResizeObserver(fitCanvas).observe(canvas);
   window.addEventListener('resize', fitCanvas);
 
+  canvas.addEventListener('pointerdown', (event) => {
+    if (menu.active || editorHost.active) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    game.handleHudTap(
+      (event.clientX - rect.left) * (canvas.width / rect.width),
+      (event.clientY - rect.top) * (canvas.height / rect.height),
+    );
+  });
+
   let lastTick = performance.now();
   function frame(now: number): void {
     const inputMode = editorHost.active ? 'editor' : menu.active ? 'menu' : 'game';
     if (document.body.dataset.inputMode !== inputMode) document.body.dataset.inputMode = inputMode;
+    const inGame = inputMode === 'game';
+    document.body.classList.toggle('touch-can-grab', inGame && game.canGrabBuilding());
+    document.body.classList.toggle('touch-holding-flag', inGame && game.localPlayer.holdingFlag !== undefined);
     if (editorHost.active) {
       lastTick = now;
       editorHost.frame();

@@ -43,6 +43,7 @@ export class Game {
   readonly particles: ParticleState[] = [];
   readonly score = { red: 0, blu: 0 };
   readonly localStats = { shots: 0, hits: 0 };
+  statsPinned = false;
   localId: string;
   private speed = MIN_SPEED;
   private lastShot = 0;
@@ -291,7 +292,7 @@ export class Game {
 
     ctx.restore();
     this.renderHud();
-    if (this.input.down.has('Tab')) this.renderStatistics();
+    if (this.input.down.has('Tab') || this.statsPinned) this.renderStatistics();
   }
 
   private renderPlayer(player: PlayerState): void {
@@ -579,6 +580,28 @@ export class Game {
     if (key !== undefined && player.inventory.some((item) => item.activationKey === key)) player.currentInventoryKey = key;
   }
 
+  // Touch: tapping an inventory slot in the bottom HUD selects it; tapping the
+  // score strip at the top toggles the statistics overlay.
+  handleHudTap(x: number, y: number): boolean {
+    if (y < 24) {
+      this.statsPinned = !this.statsPinned;
+      return true;
+    }
+    if (y < this.canvas.height - 44) return false;
+    const player = this.localPlayer;
+    const itemWidth = 24;
+    const itemPadding = 21;
+    let inventoryX = this.canvas.width / 2 - ((itemWidth + itemPadding) * player.inventory.length) / 2;
+    for (const item of player.inventory) {
+      if (x >= inventoryX - 17 && x < inventoryX + 28) {
+        player.currentInventoryKey = item.activationKey;
+        return true;
+      }
+      inventoryX += itemWidth + itemPadding;
+    }
+    return false;
+  }
+
   private updateCarriedBuilding(player: PlayerState): void {
     if (!player.carriedBuildingId) return;
     const entity = this.level.entities.find((candidate) => candidate.id === player.carriedBuildingId);
@@ -597,8 +620,17 @@ export class Game {
       this.dropCarriedBuilding(player);
       return;
     }
+    const entity = this.findGrabbableBuilding(player);
+    if (!entity?.id) return;
+    entity.x = player.x;
+    entity.y = player.y;
+    entity.solid = false;
+    player.carriedBuildingId = entity.id;
+  }
+
+  private findGrabbableBuilding(player: PlayerState): StaticEntity | undefined {
     const range = interactionRange(player);
-    const entity = this.level.entities.find((candidate) => {
+    return this.level.entities.find((candidate) => {
       const [w, h] = entitySize(candidate);
       return isPlacedBuilding(candidate)
         && candidate.owner === player.id
@@ -606,11 +638,12 @@ export class Game {
         && !candidate.countdown
         && rectsIntersect(range.x, range.y, range.w, range.h, candidate.x, candidate.y, w, h);
     });
-    if (!entity?.id) return;
-    entity.x = player.x;
-    entity.y = player.y;
-    entity.solid = false;
-    player.carriedBuildingId = entity.id;
+  }
+
+  // Touch UI: whether the grab button has anything to act on right now.
+  canGrabBuilding(): boolean {
+    const player = this.localPlayer;
+    return player.carriedBuildingId !== undefined || this.findGrabbableBuilding(player) !== undefined;
   }
 
   private dropCarriedBuilding(player: PlayerState): void {

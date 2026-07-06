@@ -130,7 +130,21 @@ export function mountPointerControls(input: InputState, root: HTMLElement = docu
   actions.append(controlButton('SPACE', 'Space', input, 'touch-space'));
   controls.append(pad, actions);
 
-  layer.append(controls, buildJoystick(input), controlButton('FIRE', 'Space', input, 'fire-button'), controlButton('ESC', 'Escape', input, 'esc-button'));
+  // Contextual actions collapse away when they have nothing to act on.
+  const actionStack = document.createElement('div');
+  actionStack.className = 'action-stack';
+  actionStack.append(
+    controlButton('DROP', 'KeyZ', input, 'drop-button', 150),
+    controlButton('GRAB', 'KeyE', input, 'grab-button'),
+  );
+
+  layer.append(
+    controls,
+    buildJoystick(input),
+    actionStack,
+    controlButton('FIRE', 'Space', input, 'fire-button'),
+    controlButton('ESC', 'Escape', input, 'esc-button'),
+  );
   root.append(layer);
   return layer;
 }
@@ -222,12 +236,13 @@ function isMovementCode(code: string): boolean {
   return ['KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(code);
 }
 
-function controlButton(label: string, code: string, input: InputState, className: string): HTMLButtonElement {
+function controlButton(label: string, code: string, input: InputState, className: string, repeatMs?: number): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = `touch-button ${className}`;
   button.textContent = label;
   button.setAttribute('aria-label', label === 'SPACE' ? 'Shoot' : `Move ${label}`);
+  let repeatTimer: number | undefined;
 
   const press = (event: PointerEvent) => {
     event.preventDefault();
@@ -241,11 +256,25 @@ function controlButton(label: string, code: string, input: InputState, className
     input.pressVirtual(code);
     // Menus and the map editor listen for keyboard events, so on-screen buttons emit them too.
     window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true, cancelable: true }));
+    // Mimic keyboard auto-repeat for actions that expect it (e.g. held self-damage).
+    if (repeatMs && repeatTimer === undefined) {
+      repeatTimer = window.setInterval(() => {
+        input.pressVirtual(code);
+        window.dispatchEvent(new KeyboardEvent('keydown', { code, repeat: true, bubbles: true, cancelable: true }));
+      }, repeatMs);
+    }
     button.classList.add('is-pressed');
+  };
+  const stopRepeat = () => {
+    if (repeatTimer !== undefined) {
+      window.clearInterval(repeatTimer);
+      repeatTimer = undefined;
+    }
   };
   const release = (event: PointerEvent) => {
     event.preventDefault();
     if (event.pointerId !== undefined && button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
+    stopRepeat();
     input.releaseVirtual(code);
     window.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
     button.classList.remove('is-pressed');
@@ -255,6 +284,7 @@ function controlButton(label: string, code: string, input: InputState, className
   button.addEventListener('pointerup', release);
   button.addEventListener('pointercancel', release);
   button.addEventListener('lostpointercapture', () => {
+    stopRepeat();
     input.releaseVirtual(code);
     button.classList.remove('is-pressed');
   });
