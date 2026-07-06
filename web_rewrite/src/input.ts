@@ -44,15 +44,23 @@ export class InputState {
     this.release(code);
   }
 
+  // Opposite keys held together resolve to the most recently pressed one, so
+  // strafing (press right before releasing left) never freezes an axis and
+  // diagonal movement keeps working while three or four keys are down.
   movementVector(): { x: number; y: number } {
-    const left = this.down.has('KeyA') || this.down.has('ArrowLeft');
-    const right = this.down.has('KeyD') || this.down.has('ArrowRight');
-    const up = this.down.has('KeyW') || this.down.has('ArrowUp');
-    const down = this.down.has('KeyS') || this.down.has('ArrowDown');
     return {
-      x: (right ? 1 : 0) - (left ? 1 : 0),
-      y: (down ? 1 : 0) - (up ? 1 : 0),
+      x: this.axisValue(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']),
+      y: this.axisValue(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']),
     };
+  }
+
+  private axisValue(negative: string[], positive: string[]): number {
+    for (let i = this.movementOrder.length - 1; i >= 0; i -= 1) {
+      const code = this.movementOrder[i];
+      if (negative.includes(code)) return -1;
+      if (positive.includes(code)) return 1;
+    }
+    return 0;
   }
 
   latestMovementCode(): string | undefined {
