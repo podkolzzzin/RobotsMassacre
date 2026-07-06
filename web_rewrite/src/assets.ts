@@ -4,6 +4,7 @@ export class SpriteSheet {
   readonly tileHeight: number;
   ready: Promise<void>;
   private readonly hueCache = new Map<string, HTMLCanvasElement>();
+  private sheetPixels: ImageData | undefined;
 
   constructor(url: string, tileWidth: number, tileHeight: number) {
     this.image = new Image();
@@ -43,27 +44,55 @@ export class SpriteSheet {
     ctx.restore();
   }
 
+  // The whole sheet is read back exactly once; hue sprites are then cut from
+  // this CPU-side copy with plain array math. Reading a fresh GPU-backed
+  // scratch canvas per sprite can return uninitialized memory on some
+  // drivers, which used to get hue-shifted and cached as a garbage square
+  // over the robot.
+  private getSheetPixels(): ImageData {
+    if (this.sheetPixels) return this.sheetPixels;
+    const canvas = document.createElement('canvas');
+    canvas.width = this.image.naturalWidth;
+    canvas.height = this.image.naturalHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) throw new Error('2D canvas is not available');
+    ctx.drawImage(this.image, 0, 0);
+    this.sheetPixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    return this.sheetPixels;
+  }
+
   private getHueSprite(sx: number, sy: number, hueDelta: number): HTMLCanvasElement {
     const key = `${sx}:${sy}:${Math.round(hueDelta * 1000)}`;
     const cached = this.hueCache.get(key);
     if (cached) return cached;
+
+    const sheet = this.getSheetPixels();
+    const sprite = new ImageData(this.tileWidth, this.tileHeight);
+    for (let y = 0; y < this.tileHeight; y += 1) {
+      const sourceY = sy * this.tileHeight + y;
+      if (sourceY >= sheet.height) break;
+      for (let x = 0; x < this.tileWidth; x += 1) {
+        const sourceX = sx * this.tileWidth + x;
+        if (sourceX >= sheet.width) break;
+        const si = (sourceY * sheet.width + sourceX) * 4;
+        const alpha = sheet.data[si + 3];
+        if (alpha === 0) continue;
+        const [h, s, v] = rgbToHsv(sheet.data[si], sheet.data[si + 1], sheet.data[si + 2]);
+        const [r, g, b] = hsvToRgb(clamp(h + hueDelta, 0, 255), s, v);
+        const di = (y * this.tileWidth + x) * 4;
+        sprite.data[di] = r;
+        sprite.data[di + 1] = g;
+        sprite.data[di + 2] = b;
+        sprite.data[di + 3] = alpha;
+      }
+    }
 
     const canvas = document.createElement('canvas');
     canvas.width = this.tileWidth;
     canvas.height = this.tileHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas is not available');
-    ctx.drawImage(this.image, sx * this.tileWidth, sy * this.tileHeight, this.tileWidth, this.tileHeight, 0, 0, this.tileWidth, this.tileHeight);
-    const image = ctx.getImageData(0, 0, this.tileWidth, this.tileHeight);
-    for (let i = 0; i < image.data.length; i += 4) {
-      if (image.data[i + 3] === 0) continue;
-      const [h, s, v] = rgbToHsv(image.data[i], image.data[i + 1], image.data[i + 2]);
-      const [r, g, b] = hsvToRgb(clamp(h + hueDelta, 0, 255), s, v);
-      image.data[i] = r;
-      image.data[i + 1] = g;
-      image.data[i + 2] = b;
-    }
-    ctx.putImageData(image, 0, 0);
+    ctx.putImageData(sprite, 0, 0);
     this.hueCache.set(key, canvas);
     return canvas;
   }
