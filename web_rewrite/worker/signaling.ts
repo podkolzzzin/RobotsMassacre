@@ -4,6 +4,7 @@ declare class WebSocketPair {
 }
 
 interface DurableObjectStorage {
+  get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<boolean>;
   list<T>(): Promise<Map<string, T>>;
@@ -45,6 +46,7 @@ export interface Env {
   ASSETS: Fetcher;
   ROOMS: DurableObjectNamespace<RoomObject>;
   LOBBY: DurableObjectNamespace<LobbyObject>;
+  KILLS: DurableObjectNamespace<KillsObject>;
 }
 
 interface SocketAttachment {
@@ -69,6 +71,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/rooms') {
       return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch(request);
+    }
+    if (url.pathname === '/leaderboard' || url.pathname === '/kills') {
+      return env.KILLS.get(env.KILLS.idFromName('kills')).fetch(request);
     }
     if (url.pathname.startsWith('/room/')) {
       const roomName = url.pathname.slice('/room/'.length) || 'default';
@@ -184,4 +189,32 @@ function readAttachment(socket: WebSocket): SocketAttachment | undefined {
   if (typeof value === 'string') return { id: value, room: '', mode: 'dm', level: '' };
   if (typeof value === 'object' && value !== null && 'id' in value) return value as SocketAttachment;
   return undefined;
+}
+
+export interface KillsEntry {
+  name: string;
+  kills: number;
+}
+
+export class KillsObject {
+  constructor(private readonly state: DurableObjectState) {}
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === 'POST' && url.pathname === '/kills') {
+      const body = (await request.json()) as { name?: unknown; kills?: unknown };
+      const rawName = typeof body.name === 'string' ? body.name.trim().slice(0, 32) : '';
+      const name = /^[\x20-\x7E]+$/.test(rawName) ? rawName : '';
+      const kills = typeof body.kills === 'number' && Number.isFinite(body.kills) ? Math.max(0, Math.floor(body.kills)) : 0;
+      if (!name || kills === 0) return new Response(JSON.stringify({ error: 'Invalid name or kills value' }), { status: 400, headers: { 'content-type': 'application/json' } });
+      const key = `kills:${name}`;
+      const stored = await this.state.storage.get<KillsEntry>(key);
+      const current = stored?.kills ?? 0;
+      await this.state.storage.put(key, { name, kills: current + kills });
+      return new Response(null, { status: 204 });
+    }
+    const entries = await this.state.storage.list<KillsEntry>();
+    const leaderboard = [...entries.values()].sort((a, b) => b.kills - a.kills);
+    return new Response(JSON.stringify({ leaderboard }), { headers: { 'content-type': 'application/json' } });
+  }
 }

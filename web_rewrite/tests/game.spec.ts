@@ -1482,7 +1482,7 @@ test('menu renders original bitmap list and opens mode selection', async ({ page
 
 test('main menu opens original how-to-play and credits screens', async ({ page }) => {
   await page.goto('/?sound=off');
-  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowDown');
+  for (let i = 0; i < 5; i += 1) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect.poll(async () => page.evaluate(() => {
     const menu = (window as Window & { menu?: { active: boolean; screen: string } }).menu!;
@@ -1507,7 +1507,7 @@ test('main menu opens original how-to-play and credits screens', async ({ page }
     return { active: menu.active, selected: menu.selected, screen: menu.screen };
   })).toEqual({ active: true, selected: 0, screen: 'main' });
 
-  for (let i = 0; i < 5; i += 1) await page.keyboard.press('ArrowDown');
+  for (let i = 0; i < 6; i += 1) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect.poll(async () => page.evaluate(() => {
     const menu = (window as Window & { menu?: { active: boolean; screen: string } }).menu!;
@@ -1529,7 +1529,7 @@ test('main menu opens original how-to-play and credits screens', async ({ page }
 
 test('main menu opens original map editor selection and help screens', async ({ page }) => {
   await page.goto('/?sound=off');
-  for (let i = 0; i < 2; i += 1) await page.keyboard.press('ArrowDown');
+  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect.poll(async () => page.evaluate(() => {
     const menu = (window as Window & { menu?: { active: boolean; selected: number; screen: string } }).menu!;
@@ -1600,7 +1600,7 @@ test('main menu opens original map editor selection and help screens', async ({ 
 
 test('main menu opens original settings screen', async ({ page }) => {
   await page.goto('/?sound=off');
-  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowDown');
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowDown');
   await page.keyboard.press('Enter');
   await expect.poll(async () => page.evaluate(() => {
     const menu = (window as Window & { menu?: { active: boolean; screen: string; settingsOption: number } }).menu!;

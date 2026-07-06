@@ -47,6 +47,9 @@ async function main(): Promise<void> {
       stats.games += 1;
     }
     saveGameStats(stats);
+    if (game.localPlayer.kills > 0) {
+      navigator.sendBeacon('/kills', new Blob([JSON.stringify({ name: game.localPlayer.name, kills: game.localPlayer.kills })], { type: 'application/json' }));
+    }
   });
   const editorHost = new EditorHost(canvas, ctx, assets);
   const menu = new MainMenu(canvas, ctx, assets, game, params.get('play') !== '1' && params.get('menu') !== '0', mode, editorHost);
