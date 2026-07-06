@@ -540,7 +540,15 @@ export class Game {
       inventoryX += itemWidth + itemPadding;
     }
 
-    writeFont(this.ctx, this.assets, `red score ${this.score.red}, blu score ${this.score.blu}`, 1, 10, 20);
+    const topBarHeight = 20;
+    this.ctx.fillStyle = 'rgb(0, 0, 0)';
+    this.ctx.fillRect(0, 0, this.canvas.width, topBarHeight);
+    const modeLabels: Record<string, string> = { dm: 'deathmatch', tdm: 'team deathmatch', ctf: 'capture the flag' };
+    writeCentered(this.ctx, this.assets, modeLabels[this.mode] ?? this.mode, 1, 6, this.canvas.width);
+    if (this.mode === 'ctf') {
+      writeFont(this.ctx, this.assets, `red ${this.score.red}`, 1, 10, 6);
+      writeFont(this.ctx, this.assets, `blu ${this.score.blu}`, 1, this.canvas.width - 40, 6);
+    }
     writeFont(this.ctx, this.assets, `${this.localStats.shots}`, 1, 10, 30);
   }
 
@@ -611,7 +619,7 @@ export class Game {
   }
 
   // Touch: tapping an inventory slot in the bottom HUD selects it; tapping the
-  // score strip at the top toggles the statistics overlay.
+  // mode strip at the top toggles the statistics overlay.
   handleHudTap(x: number, y: number): boolean {
     if (y < 24) {
       this.statsPinned = !this.statsPinned;
