@@ -867,6 +867,81 @@ test('owned buildings can be picked up moved and dropped with interact', async (
   })).toEqual({ carried: undefined, x: 240, y: 241, solid: true });
 });
 
+test('death drops the carried building in place instead of hauling it to the spawn', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localId: string;
+      localPlayer: { x: number; y: number; hp: number; direction: number; carriedBuildingId?: string };
+      level: {
+        entities: Array<{
+          id?: string;
+          kind: string;
+          owner?: string;
+          x: number;
+          y: number;
+          solid: boolean;
+          health: number;
+          maxHealth: number;
+          removed: boolean;
+          direction?: number;
+          lastShot?: number;
+          skippedAnimTicks?: number;
+        }>;
+      };
+    } }).game!;
+    game.level.entities = [{
+      id: 'hauled-turret',
+      kind: 'turret',
+      owner: game.localId,
+      x: 180,
+      y: 180,
+      solid: true,
+      health: 125,
+      maxHealth: 125,
+      removed: false,
+      direction: 0,
+      lastShot: performance.now(),
+      skippedAnimTicks: 0,
+    }];
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.direction = 1;
+    game.localPlayer.carriedBuildingId = undefined;
+  });
+
+  await page.keyboard.press('KeyE');
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { carriedBuildingId?: string } } }).game!;
+    return game.localPlayer.carriedBuildingId;
+  })).toBe('hauled-turret');
+
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: { localPlayer: { hp: number } } }).game!;
+    game.localPlayer.hp = 10;
+  });
+  await page.keyboard.press('KeyZ');
+
+  await expect.poll(async () => page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { hp: number; x: number; y: number; carriedBuildingId?: string };
+      level: { entities: Array<{ id?: string; x: number; y: number; solid: boolean }> };
+    } }).game!;
+    const entity = game.level.entities.find((candidate) => candidate.id === 'hauled-turret')!;
+    return {
+      hp: game.localPlayer.hp,
+      carried: game.localPlayer.carriedBuildingId,
+      entity: { x: entity.x, y: entity.y, solid: entity.solid },
+      movedWithPlayer: entity.x === game.localPlayer.x && entity.y === game.localPlayer.y,
+    };
+  }), { timeout: 5000 }).toMatchObject({
+    hp: 100,
+    carried: undefined,
+    entity: { x: 180, y: 180, solid: true },
+    movedWithPlayer: false,
+  });
+});
+
 test('owned buildings render original focus cues and mine countdown', async ({ page }) => {
   await page.goto(playUrl('/?sound=off'));
   await page.evaluate(() => {

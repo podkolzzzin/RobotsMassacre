@@ -684,6 +684,17 @@ export class Game {
     return player.carriedBuildingId !== undefined || this.findGrabbableBuilding(player) !== undefined;
   }
 
+  // Death unbinds the carried building where it stands, as the original game
+  // does on respawn; otherwise it would follow the corpse to the spawn point
+  // and keep rendering the carried-building preview over the fresh robot.
+  private releaseCarriedBuilding(player: PlayerState): void {
+    if (!player.carriedBuildingId) return;
+    const entity = this.level.entities.find((candidate) => candidate.id === player.carriedBuildingId);
+    player.carriedBuildingId = undefined;
+    if (!entity || entity.removed) return;
+    entity.solid = true;
+  }
+
   private dropCarriedBuilding(player: PlayerState): void {
     const entity = this.level.entities.find((candidate) => candidate.id === player.carriedBuildingId);
     if (!entity) {
@@ -780,6 +791,7 @@ export class Game {
   private killPlayer(player: PlayerState): void {
     this.addRobotDebris(player);
     this.stopHoldingFlag(player);
+    this.releaseCarriedBuilding(player);
     player.deaths += 1;
     const jitter = hashString(player.id) % RESPAWN_JITTER_MS;
     this.pendingRespawns.set(player.id, performance.now() + RESPAWN_DELAY_MS + jitter);
