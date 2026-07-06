@@ -4,6 +4,7 @@ declare class WebSocketPair {
 }
 
 interface DurableObjectStorage {
+  get<T>(key: string): Promise<T | undefined>;
   put(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<boolean>;
   list<T>(): Promise<Map<string, T>>;
@@ -202,11 +203,12 @@ export class KillsObject {
     const url = new URL(request.url);
     if (request.method === 'POST' && url.pathname === '/kills') {
       const body = (await request.json()) as { name?: unknown; kills?: unknown };
-      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 32) : '';
+      const rawName = typeof body.name === 'string' ? body.name.trim().slice(0, 32) : '';
+      const name = /^[\x20-\x7E]+$/.test(rawName) ? rawName : '';
       const kills = typeof body.kills === 'number' && Number.isFinite(body.kills) ? Math.max(0, Math.floor(body.kills)) : 0;
-      if (!name || kills === 0) return new Response(null, { status: 400 });
+      if (!name || kills === 0) return new Response(JSON.stringify({ error: 'Invalid name or kills value' }), { status: 400, headers: { 'content-type': 'application/json' } });
       const key = `kills:${name}`;
-      const stored = (await this.state.storage.list<KillsEntry>()).get(key);
+      const stored = await this.state.storage.get<KillsEntry>(key);
       const current = stored?.kills ?? 0;
       await this.state.storage.put(key, { name, kills: current + kills });
       return new Response(null, { status: 204 });

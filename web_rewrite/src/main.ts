@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     }
     saveGameStats(stats);
     if (game.localPlayer.kills > 0) {
-      navigator.sendBeacon('/kills', JSON.stringify({ name: game.localPlayer.name, kills: game.localPlayer.kills }));
+      navigator.sendBeacon('/kills', new Blob([JSON.stringify({ name: game.localPlayer.name, kills: game.localPlayer.kills })], { type: 'application/json' }));
     }
   });
   const editorHost = new EditorHost(canvas, ctx, assets);
