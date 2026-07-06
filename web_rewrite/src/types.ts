@@ -138,6 +138,9 @@ export interface BulletState {
   y: number;
   direction: Direction;
   ap: boolean;
+  // Distance traveled so far; the world wraps at its edges, so bullets no
+  // longer despawn by leaving it and need a lifetime cutoff instead.
+  traveled?: number;
 }
 
 export interface WallState {
