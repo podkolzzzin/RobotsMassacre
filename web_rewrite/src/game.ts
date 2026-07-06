@@ -1,5 +1,6 @@
 import { Assets, writeFont } from './assets';
 import { SoundBank } from './audio';
+import { GameConfig, BONUS_TILE_COLUMNS, buildBonusSchedule, bonusSpawnIntervalTicks, defaultGameConfig } from './config';
 import { InputState } from './input';
 import { LevelData, PlayerState, BulletState, Direction, HitState, NetworkGameState, ParticleState, StaticEntity, TILE_SIZE, WallState, BonusState, BonusKind, InventoryKind, InventoryItemState, Team } from './types';
 import { nextArbitraryFrame, spriteForDetail, spriteForEntity, spriteForTile, wallFrame } from './level';
@@ -34,7 +35,6 @@ const MINE_RANGE = 50;
 const MINE_EXPLOSION_DELAY = 25;
 const MINE_MAX_DAMAGE = 100;
 const MINE_DAMAGE_DELTA = 5;
-const BONUS_KINDS: BonusKind[] = ['acceleration', 'ap-bullets', 'big-ammo', 'big-med', 'invulnerability', 'mine', 'small-ammo', 'small-med', 'turret', 'dispenser'];
 // Respawn is delayed so positions broadcast by other clients during the wait
 // are known before a spawn point is picked; the per-player jitter keeps two
 // clients that died simultaneously from choosing the same spot.
@@ -51,7 +51,12 @@ export class Game {
   readonly score = { red: 0, blu: 0 };
   readonly localStats = { shots: 0, hits: 0 };
   statsPinned = false;
+  gameOver = false;
   localId: string;
+  private endAt: number | undefined;
+  private readonly durationMs: number;
+  private readonly bonusSchedule: BonusKind[];
+  private readonly bonusIntervalTicks: number;
   private speed = MIN_SPEED;
   private lastShot = 0;
   private cameraX = 0;
@@ -78,7 +83,11 @@ export class Game {
     private readonly input: InputState,
     private readonly sounds = new SoundBank(),
     private readonly mode = 'dm',
+    config: GameConfig = defaultGameConfig(),
   ) {
+    this.durationMs = config.durationMs;
+    this.bonusSchedule = buildBonusSchedule(config.bonusFrequencies);
+    this.bonusIntervalTicks = bonusSpawnIntervalTicks(config.bonusFrequencies, BONUS_SKIP_TICKS);
     this.localId = crypto.randomUUID();
     const spawn = level.spawners[0] ?? { x: TILE_SIZE, y: TILE_SIZE };
     this.players.set(this.localId, {
@@ -107,8 +116,23 @@ export class Game {
     return player;
   }
 
+  remainingMs(now = performance.now()): number {
+    if (this.gameOver) return 0;
+    if (this.endAt === undefined) return this.durationMs;
+    return Math.max(0, this.endAt - now);
+  }
+
   tick(now: number): void {
+    if (this.endAt === undefined) this.endAt = now + this.durationMs;
+    if (!this.gameOver && now >= this.endAt) this.gameOver = true;
     const player = this.localPlayer;
+    if (this.gameOver) {
+      player.moving = false;
+      player.shooting = false;
+      this.updateParticles();
+      this.centerCamera(player);
+      return;
+    }
     this.updateRespawns(now);
     this.recheckSpawnSettling(now);
     const alive = player.hp > 0;
@@ -234,6 +258,7 @@ export class Game {
       removedBonuses: this.recentBonusRemovals.map((bonus) => bonus.id),
       walls: this.changedWalls(),
       hits: this.recentHits.map(({ ticks: _ticks, ...hit }) => ({ ...hit })),
+      remainingMs: this.endAt === undefined ? undefined : Math.max(0, this.endAt - performance.now()),
     };
   }
 
@@ -247,6 +272,15 @@ export class Game {
     this.applyBonusRemovals(state.removedBonuses);
     this.applyWallStates(state.walls);
     this.applyHits(state.hits);
+    this.applyRemainingTime(state.remainingMs);
+  }
+
+  // Peers can start counting down at different moments; converging on the
+  // smallest remaining time keeps every client ending the match together.
+  private applyRemainingTime(remainingMs: number | undefined): void {
+    if (remainingMs === undefined) return;
+    const candidate = performance.now() + remainingMs;
+    if (this.endAt === undefined || candidate < this.endAt) this.endAt = candidate;
   }
 
   levelSummary(): { tiles: number; details: number; entities: number; spawners: number } {
@@ -316,7 +350,13 @@ export class Game {
 
     ctx.restore();
     this.renderHud();
-    if (this.input.down.has('Tab') || this.statsPinned) this.renderStatistics();
+    if (this.gameOver) {
+      this.renderStatistics();
+      writeCentered(ctx, this.assets, 'game over', 2, this.canvas.height - 60, this.canvas.width);
+      writeCentered(ctx, this.assets, 'press esc for menu', 1, this.canvas.height - 35, this.canvas.width);
+    } else if (this.input.down.has('Tab') || this.statsPinned) {
+      this.renderStatistics();
+    }
   }
 
   private renderPlayer(player: PlayerState): void {
@@ -545,7 +585,8 @@ export class Game {
     this.ctx.fillStyle = 'rgb(0, 0, 0)';
     this.ctx.fillRect(0, 0, this.canvas.width, topBarHeight);
     const modeLabels: Record<string, string> = { dm: 'deathmatch', tdm: 'team deathmatch', ctf: 'capture the flag' };
-    writeCentered(this.ctx, this.assets, modeLabels[this.mode] ?? this.mode, 1, 6, this.canvas.width);
+    writeCentered(this.ctx, this.assets, modeLabels[this.mode] ?? this.mode, 1, 2, this.canvas.width);
+    writeCentered(this.ctx, this.assets, formatTime(this.remainingMs()), 1, 11, this.canvas.width);
     if (this.mode === 'ctf') {
       writeFont(this.ctx, this.assets, `red ${this.score.red}`, 1, 10, 6);
       writeFont(this.ctx, this.assets, `blu ${this.score.blu}`, 1, this.canvas.width - 40, 6);
@@ -903,11 +944,12 @@ export class Game {
   }
 
   private manageBonusGeneration(): void {
-    if (this.skippedBonusTicks++ <= BONUS_SKIP_TICKS || this.bonuses.size > MAX_BONUSES) return;
+    if (this.bonusSchedule.length === 0) return;
+    if (this.skippedBonusTicks++ <= this.bonusIntervalTicks || this.bonuses.size > MAX_BONUSES) return;
     this.skippedBonusTicks = 0;
     const cell = this.futureBonusCell();
     if (!cell) return;
-    this.addBonus(BONUS_KINDS[this.bonusId % BONUS_KINDS.length], cell[0] * TILE_SIZE, cell[1] * TILE_SIZE);
+    this.addBonus(this.bonusSchedule[this.bonusId % this.bonusSchedule.length], cell[0] * TILE_SIZE, cell[1] * TILE_SIZE);
   }
 
   private futureBonusCell(): [number, number] | undefined {
@@ -1513,16 +1555,12 @@ function distanceSquared(ax: number, ay: number, bx: number, by: number): number
 }
 
 function bonusImageIndex(kind: BonusKind): number {
-  if (kind === 'big-ammo') return 0;
-  if (kind === 'big-med') return 1;
-  if (kind === 'ap-bullets') return 2;
-  if (kind === 'invulnerability') return 3;
-  if (kind === 'acceleration') return 4;
-  if (kind === 'small-med') return 5;
-  if (kind === 'small-ammo') return 6;
-  if (kind === 'turret') return 7;
-  if (kind === 'mine') return 8;
-  return 10;
+  return BONUS_TILE_COLUMNS[kind];
+}
+
+function formatTime(remainingMs: number): string {
+  const seconds = Math.ceil(remainingMs / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
 function inventoryItem(kind: InventoryKind): InventoryItemState {

@@ -1,18 +1,24 @@
+import { DEFAULT_BONUSES_PARAM, DEFAULT_GAME_MINUTES } from './config';
 import { Game } from './game';
 import { NetworkGameState } from './types';
 
 type SignalMessage =
   | { type: 'join'; id: string }
-  | { type: 'meta'; from: string; to: string; mode: string; level: string }
+  | { type: 'meta'; from: string; to: string; mode: string; level: string; bonuses?: string; duration?: string }
   | { type: 'offer'; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: 'answer'; from: string; to: string; sdp: RTCSessionDescriptionInit }
   | { type: 'ice'; from: string; to: string; candidate: RTCIceCandidateInit };
 
 const DEFAULT_LEVEL = '/levels/dm/open.rmm';
 
-function currentMeta(): { mode: string; level: string } {
+function currentMeta(): { mode: string; level: string; bonuses: string; duration: string } {
   const params = new URLSearchParams(location.search);
-  return { mode: params.get('mode') ?? 'dm', level: params.get('level') ?? DEFAULT_LEVEL };
+  return {
+    mode: params.get('mode') ?? 'dm',
+    level: params.get('level') ?? DEFAULT_LEVEL,
+    bonuses: params.get('bonuses') ?? DEFAULT_BONUSES_PARAM,
+    duration: params.get('duration') ?? String(DEFAULT_GAME_MINUTES),
+  };
 }
 
 interface SignalTransport {
@@ -57,16 +63,20 @@ export class Multiplayer {
     if ('to' in message && message.to !== this.game.localId) return;
     if (message.type === 'join' && message.id !== this.game.localId) {
       const meta = currentMeta();
-      this.send({ type: 'meta', from: this.game.localId, to: message.id, mode: meta.mode, level: meta.level });
+      this.send({ type: 'meta', from: this.game.localId, to: message.id, mode: meta.mode, level: meta.level, bonuses: meta.bonuses, duration: meta.duration });
       await this.createOffer(message.id);
       return;
     }
     if (message.type === 'meta') {
       const meta = currentMeta();
-      if (meta.mode !== message.mode || meta.level !== message.level) {
+      const bonuses = message.bonuses ?? meta.bonuses;
+      const duration = message.duration ?? meta.duration;
+      if (meta.mode !== message.mode || meta.level !== message.level || meta.bonuses !== bonuses || meta.duration !== duration) {
         const params = new URLSearchParams(location.search);
         params.set('mode', message.mode);
         params.set('level', message.level);
+        params.set('bonuses', bonuses);
+        params.set('duration', duration);
         params.set('play', '1');
         location.search = params.toString();
       }

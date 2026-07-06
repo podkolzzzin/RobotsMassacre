@@ -1,4 +1,5 @@
 import { Assets, writeFont } from './assets';
+import { BONUS_FREQUENCIES, BONUS_KINDS, BONUS_TILE_COLUMNS, DEFAULT_BONUS_FREQUENCY_INDEX, DEFAULT_GAME_MINUTES, MAX_GAME_MINUTES, MIN_GAME_MINUTES } from './config';
 import { EditorHost, EditorMode, FILL_TILES, MAX_MAP_NAME, MAX_MAP_SIZE, MIN_MAP_SIZE, MODE_SPRITES, inferModeFromBuffer } from './editor';
 import type { Game } from './game';
 import { createThumbnail } from './level';
@@ -60,7 +61,7 @@ const CREATE_FORM_LABELS = ['title: ', 'base: ', 'mode: ', 'width: ', 'height: '
 const SETTINGS_OPTIONS_Y = [60, 175, 195];
 const DIMENSIONS: Array<[number, number]> = [[640, 480], [800, 600], [960, 600]];
 const MAX_PLAYER_NAME = 16;
-type MenuScreen = 'main' | 'mode' | 'level' | 'join' | 'join-code' | 'team' | 'pause' | 'help' | 'credits' | 'settings' | 'leaderboard'
+type MenuScreen = 'main' | 'mode' | 'level' | 'game-config' | 'join' | 'join-code' | 'team' | 'pause' | 'help' | 'credits' | 'settings' | 'leaderboard'
   | 'map-editor' | 'map-editor-help' | 'map-editor-create' | 'map-editor-open' | 'map-editor-download';
 
 interface RoomListItem {
@@ -92,6 +93,21 @@ interface CreateFormState {
   focus: number;
 }
 
+// Focus walks the bonus rows (one per kind), then duration, then start.
+interface GameConfigFormState {
+  frequencies: number[];
+  minutes: number;
+  focus: number;
+}
+
+const CONFIG_DURATION_FOCUS = BONUS_KINDS.length;
+const CONFIG_START_FOCUS = BONUS_KINDS.length + 1;
+const CONFIG_ROWS = 5;
+
+function defaultGameConfigForm(): GameConfigFormState {
+  return { frequencies: BONUS_KINDS.map(() => DEFAULT_BONUS_FREQUENCY_INDEX), minutes: DEFAULT_GAME_MINUTES, focus: 0 };
+}
+
 export class MainMenu {
   selected = 0;
   active: boolean;
@@ -102,6 +118,8 @@ export class MainMenu {
   private joinCode = '';
   private mapItems: MapGridItem[] = [];
   private createForm: CreateFormState = { title: '', base: 0, mode: 0, width: MIN_MAP_SIZE, height: MIN_MAP_SIZE, focus: 0 };
+  private configForm: GameConfigFormState = defaultGameConfigForm();
+  private pendingLevel?: LevelGridItem;
   private joinRooms: RoomListItem[] = [];
   private joinStatus: 'loading' | 'ready' | 'error' = 'loading';
   private leaderboard: { name: string; kills: number }[] = [];
@@ -165,6 +183,10 @@ export class MainMenu {
       }
       return;
     }
+    if (this.screen === 'game-config') {
+      this.onGameConfigTap(x, y);
+      return;
+    }
     if (this.screen === 'join') {
       const index = Math.floor((y - 73) / 15);
       if (index >= 0 && index < this.joinRooms.length) {
@@ -202,6 +224,11 @@ export class MainMenu {
       writeFont(ctx, this.assets, `mode ${MODE_NUMBERS[this.levelMode]}`, 1, 10, 10);
       writeFont(ctx, this.assets, `levels ${this.levelItems.length}`, 1, 10, 20);
       this.renderLevelGrid();
+      return;
+    }
+    if (this.screen === 'game-config') {
+      writeCentered(ctx, this.assets, title, 2, 24, this.canvas.width);
+      this.renderGameConfig();
       return;
     }
     if (this.screen === 'map-editor-create') {
@@ -278,6 +305,10 @@ export class MainMenu {
     }
     if (this.screen === 'level') {
       this.onLevelKey(event);
+      return;
+    }
+    if (this.screen === 'game-config') {
+      this.onGameConfigKey(event);
       return;
     }
     if (this.screen === 'map-editor-create') {
@@ -457,12 +488,99 @@ export class MainMenu {
   }
 
   private startLevel(item: LevelGridItem): void {
+    this.pendingLevel = item;
+    this.configForm = defaultGameConfigForm();
+    this.screen = 'game-config';
+  }
+
+  private launchGame(): void {
+    const item = this.pendingLevel;
+    if (!item) return;
     const params = new URLSearchParams(location.search);
     params.set('play', '1');
     params.set('mode', this.levelMode);
     params.set('level', item.path);
+    params.set('bonuses', this.configForm.frequencies.join(''));
+    params.set('duration', String(this.configForm.minutes));
     if (!params.get('room')) params.set('room', generateRoomCode());
     location.search = params.toString();
+  }
+
+  private onGameConfigKey(event: KeyboardEvent): void {
+    const form = this.configForm;
+    const { code } = event;
+    const focusCount = CONFIG_START_FOCUS + 1;
+    if (code === 'Escape') {
+      this.screen = 'level';
+    } else if (code === 'Tab' || code === 'ArrowDown' || code === 'KeyS') {
+      form.focus = (form.focus + 1) % focusCount;
+    } else if (code === 'ArrowUp' || code === 'KeyW') {
+      form.focus = (form.focus + focusCount - 1) % focusCount;
+    } else if (code === 'Enter' || code === 'Space') {
+      this.launchGame();
+    } else if (code === 'ArrowLeft' || code === 'KeyA' || code === 'ArrowRight' || code === 'KeyD') {
+      const delta = code === 'ArrowLeft' || code === 'KeyA' ? -1 : 1;
+      if (form.focus < BONUS_KINDS.length) {
+        form.frequencies[form.focus] = (form.frequencies[form.focus] + delta + BONUS_FREQUENCIES.length) % BONUS_FREQUENCIES.length;
+      } else if (form.focus === CONFIG_DURATION_FOCUS) {
+        form.minutes = Math.max(MIN_GAME_MINUTES, Math.min(MAX_GAME_MINUTES, form.minutes + delta));
+      }
+    } else {
+      return;
+    }
+    event.preventDefault();
+  }
+
+  // Touch: tapping a bonus tile or the duration line cycles its value.
+  private onGameConfigTap(x: number, y: number): void {
+    const form = this.configForm;
+    const layout = this.gameConfigLayout();
+    for (let i = 0; i < BONUS_KINDS.length; i += 1) {
+      const cellX = layout.gridX + Math.floor(i / CONFIG_ROWS) * layout.colWidth;
+      const cellY = layout.gridY + (i % CONFIG_ROWS) * layout.rowHeight;
+      if (x >= cellX - 2 && x < cellX + layout.colWidth - 10 && y >= cellY - 2 && y < cellY + 32) {
+        form.focus = i;
+        form.frequencies[i] = (form.frequencies[i] + 1) % BONUS_FREQUENCIES.length;
+        return;
+      }
+    }
+    if (y >= layout.durationY - 4 && y < layout.durationY + 14) {
+      form.focus = CONFIG_DURATION_FOCUS;
+      form.minutes = form.minutes >= MAX_GAME_MINUTES ? MIN_GAME_MINUTES : form.minutes + 1;
+      return;
+    }
+    if (y >= layout.startButtonY - 6 && y < layout.startButtonY + 22) this.launchGame();
+  }
+
+  private gameConfigLayout(): { gridX: number; gridY: number; colWidth: number; rowHeight: number; durationY: number; startButtonY: number } {
+    const colWidth = Math.min(250, Math.floor((this.canvas.width - 20) / 2));
+    const gridX = Math.floor((this.canvas.width - colWidth * 2) / 2);
+    const gridY = 52;
+    const rowHeight = 36;
+    const durationY = gridY + CONFIG_ROWS * rowHeight + 8;
+    return { gridX, gridY, colWidth, rowHeight, durationY, startButtonY: durationY + 25 };
+  }
+
+  private renderGameConfig(): void {
+    const { ctx, assets } = this;
+    const form = this.configForm;
+    const layout = this.gameConfigLayout();
+    for (let i = 0; i < BONUS_KINDS.length; i += 1) {
+      const x = layout.gridX + Math.floor(i / CONFIG_ROWS) * layout.colWidth;
+      const y = layout.gridY + (i % CONFIG_ROWS) * layout.rowHeight;
+      if (form.focus === i) {
+        ctx.fillStyle = 'rgb(255, 255, 255)';
+        ctx.fillRect(x - 2, y - 2, 34, 34);
+      }
+      assets.graphics.draw(ctx, BONUS_TILE_COLUMNS[BONUS_KINDS[i]], 19, x, y);
+      writeFont(ctx, assets, `< ${BONUS_FREQUENCIES[form.frequencies[i]]} >`, 1, x + 38, y + 11);
+    }
+    const durationText = `duration: < ${form.minutes} min >`;
+    const durationX = Math.round((this.canvas.width - durationText.length * 8) / 2);
+    if (form.focus === CONFIG_DURATION_FOCUS) writeFont(ctx, assets, '>', 1, durationX - 16, layout.durationY);
+    writeFont(ctx, assets, durationText, 1, durationX, layout.durationY);
+    writeCentered(ctx, assets, form.focus === CONFIG_START_FOCUS ? '> start <' : 'start', 2, layout.startButtonY, this.canvas.width);
+    writeCentered(ctx, assets, 'tab to switch, arrows to change, enter to start, esc to back', 1, this.canvas.height - 20, this.canvas.width);
   }
 
   private openJoinList(): void {
@@ -884,6 +1002,7 @@ export class MainMenu {
     if (this.screen === 'main') return 'robots massacre';
     if (this.screen === 'mode') return 'select game mode';
     if (this.screen === 'level') return 'select level';
+    if (this.screen === 'game-config') return 'game settings';
     if (this.screen === 'join' || this.screen === 'join-code') return 'join game';
     if (this.screen === 'pause') return 'paused';
     if (this.screen === 'help') return 'how to play';

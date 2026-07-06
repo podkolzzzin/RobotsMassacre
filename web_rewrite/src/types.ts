@@ -177,4 +177,5 @@ export interface NetworkGameState {
   removedBonuses: string[];
   walls: WallState[];
   hits: HitState[];
+  remainingMs?: number;
 }

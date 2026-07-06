@@ -1,6 +1,7 @@
 import './styles.css';
 import { SoundBank } from './audio';
 import { loadAssets } from './assets';
+import { gameConfigFromParams } from './config';
 import { EditorHost } from './editor';
 import { Game } from './game';
 import { InputState, mountPointerControls } from './input';
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
   const mode = params.get('mode') ?? 'dm';
   const input = new InputState(window);
   mountPointerControls(input);
-  const game = new Game(canvas, ctx, level, assets, input, sounds, mode);
+  const game = new Game(canvas, ctx, level, assets, input, sounds, mode, gameConfigFromParams(params));
   if (settings.name) game.localPlayer.name = settings.name;
   const team = params.get('team');
   if (team === 'red' || team === 'blu') game.localPlayer.team = team;

@@ -23,8 +23,13 @@ test('menu is navigable by tapping items on a phone', async ({ page }) => {
   await tapCanvas(page, 195, 68); // 'deathmatch'
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('level');
   await tapCanvas(page, 90, 110); // first level thumbnail (3-column centered grid)
+  await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('game-config');
+  await tapCanvas(page, 195, 270); // 'start' button below the defaults
   await page.waitForURL(/play=1/);
-  expect(new URL(page.url()).searchParams.get('mode')).toBe('dm');
+  const params = new URL(page.url()).searchParams;
+  expect(params.get('mode')).toBe('dm');
+  expect(params.get('bonuses')).toBe('2222222222');
+  expect(params.get('duration')).toBe('5');
 });
 
 test('on-screen esc button navigates back through menus', async ({ page }) => {
