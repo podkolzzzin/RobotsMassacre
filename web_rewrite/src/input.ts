@@ -6,18 +6,41 @@ export class InputState {
   private readonly inventoryClicked = new Set<number>();
   private readonly movementOrder: string[] = [];
   private suppressAttackHeld = false;
+  private suspended = false;
 
   constructor(target: Window) {
     target.addEventListener('keydown', (event) => {
+      if (this.suspended) return;
       this.press(event.code, !event.repeat);
       const digit = inventoryDigit(event.code);
       if (digit !== undefined) this.inventoryClicked.add(digit);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'Tab'].includes(event.code)) event.preventDefault();
     });
     target.addEventListener('keyup', (event) => {
+      if (this.suspended) return;
       this.release(event.code);
     });
     target.addEventListener('blur', () => this.releaseAll());
+  }
+
+  // While a text field (the in-game chat) owns the keyboard, ignore game keys so
+  // typing WASD into a message never drives the tank, and release anything held.
+  suspend(): void {
+    if (this.suspended) return;
+    this.suspended = true;
+    this.releaseAll();
+    this.attackClicked = false;
+    this.interactClicked = false;
+    this.selfDamageClicked = false;
+    this.inventoryClicked.clear();
+  }
+
+  resume(): void {
+    this.suspended = false;
+  }
+
+  get isSuspended(): boolean {
+    return this.suspended;
   }
 
   consumeAttack(): boolean {

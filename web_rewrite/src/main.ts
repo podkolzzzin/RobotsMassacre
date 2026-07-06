@@ -1,6 +1,7 @@
 import './styles.css';
 import { SoundBank } from './audio';
 import { loadAssets } from './assets';
+import { Chat } from './chat';
 import { gameConfigFromParams } from './config';
 import { EditorHost } from './editor';
 import { Game } from './game';
@@ -65,6 +66,18 @@ async function main(): Promise<void> {
   if (room) multiplayer.connect(room, signal);
   registerServiceWorker(params);
 
+  // In-game chat: T opens the input, Enter sends. Freeze the tank while typing
+  // so WASD lands in the message instead of driving the robot.
+  const chat = new Chat(canvas, () => !menu.active && !editorHost.active && !game.gameOver);
+  chat.onOpen = () => input.suspend();
+  chat.onClose = () => input.resume();
+  chat.onSubmit = (text) => {
+    const name = game.localPlayer.name;
+    chat.addMessage(name, text);
+    multiplayer.sendChat(name, text);
+  };
+  multiplayer.onChat = (name, text) => chat.addMessage(name, text);
+
   // On touch layouts the canvas fills the screen; keep its logical resolution
   // matched to the CSS size so pixels stay square and nothing is letterboxed.
   const fitCanvas = () => {
@@ -95,6 +108,8 @@ async function main(): Promise<void> {
     const inputMode = editorHost.active ? 'editor' : menu.active ? 'menu' : 'game';
     if (document.body.dataset.inputMode !== inputMode) document.body.dataset.inputMode = inputMode;
     const inGame = inputMode === 'game';
+    if (!inGame) chat.close();
+    chat.update(now);
     document.body.classList.toggle('touch-can-grab', inGame && game.canGrabBuilding());
     document.body.classList.toggle('touch-holding-flag', inGame && game.localPlayer.holdingFlag !== undefined);
     if (editorHost.active) {
@@ -115,7 +130,7 @@ async function main(): Promise<void> {
   }
   requestAnimationFrame(frame);
 
-  Object.assign(window, { game, multiplayer, menu, editor: editorHost });
+  Object.assign(window, { game, multiplayer, menu, editor: editorHost, chat });
 }
 
 function registerServiceWorker(params: URLSearchParams): void {
