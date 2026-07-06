@@ -93,15 +93,17 @@ interface CreateFormState {
   focus: number;
 }
 
-// Focus walks the bonus rows (one per kind), then duration, then start.
+// Focus walks the all-bonuses group row, the bonus rows (one per kind),
+// then duration, then start.
 interface GameConfigFormState {
   frequencies: number[];
   minutes: number;
   focus: number;
 }
 
-const CONFIG_DURATION_FOCUS = BONUS_KINDS.length;
-const CONFIG_START_FOCUS = BONUS_KINDS.length + 1;
+const CONFIG_ALL_FOCUS = 0;
+const CONFIG_DURATION_FOCUS = BONUS_KINDS.length + 1;
+const CONFIG_START_FOCUS = BONUS_KINDS.length + 2;
 const CONFIG_ROWS = 5;
 
 function defaultGameConfigForm(): GameConfigFormState {
@@ -520,8 +522,11 @@ export class MainMenu {
       this.launchGame();
     } else if (code === 'ArrowLeft' || code === 'KeyA' || code === 'ArrowRight' || code === 'KeyD') {
       const delta = code === 'ArrowLeft' || code === 'KeyA' ? -1 : 1;
-      if (form.focus < BONUS_KINDS.length) {
-        form.frequencies[form.focus] = (form.frequencies[form.focus] + delta + BONUS_FREQUENCIES.length) % BONUS_FREQUENCIES.length;
+      if (form.focus === CONFIG_ALL_FOCUS) {
+        this.setAllFrequencies(delta);
+      } else if (form.focus <= BONUS_KINDS.length) {
+        const index = form.focus - 1;
+        form.frequencies[index] = (form.frequencies[index] + delta + BONUS_FREQUENCIES.length) % BONUS_FREQUENCIES.length;
       } else if (form.focus === CONFIG_DURATION_FOCUS) {
         form.minutes = Math.max(MIN_GAME_MINUTES, Math.min(MAX_GAME_MINUTES, form.minutes + delta));
       }
@@ -531,15 +536,30 @@ export class MainMenu {
     event.preventDefault();
   }
 
-  // Touch: tapping a bonus tile or the duration line cycles its value.
+  // Cycles all bonuses together; a mixed selection snaps back to the default
+  // before stepping applies again, like an indeterminate group checkbox.
+  private setAllFrequencies(delta: number): void {
+    const { frequencies } = this.configForm;
+    const shared = frequencies.every((value) => value === frequencies[0]) ? frequencies[0] : undefined;
+    const next = shared === undefined ? DEFAULT_BONUS_FREQUENCY_INDEX : (shared + delta + BONUS_FREQUENCIES.length) % BONUS_FREQUENCIES.length;
+    frequencies.fill(next);
+  }
+
+  // Touch: tapping a bonus tile, the all-bonuses line or the duration line
+  // cycles its value.
   private onGameConfigTap(x: number, y: number): void {
     const form = this.configForm;
     const layout = this.gameConfigLayout();
+    if (y >= layout.allY - 4 && y < layout.allY + 14) {
+      form.focus = CONFIG_ALL_FOCUS;
+      this.setAllFrequencies(1);
+      return;
+    }
     for (let i = 0; i < BONUS_KINDS.length; i += 1) {
       const cellX = layout.gridX + Math.floor(i / CONFIG_ROWS) * layout.colWidth;
       const cellY = layout.gridY + (i % CONFIG_ROWS) * layout.rowHeight;
-      if (x >= cellX - 2 && x < cellX + layout.colWidth - 10 && y >= cellY - 2 && y < cellY + 32) {
-        form.focus = i;
+      if (x >= cellX - 2 && x < cellX + layout.colWidth - 2 && y >= cellY - 2 && y < cellY + 32) {
+        form.focus = i + 1;
         form.frequencies[i] = (form.frequencies[i] + 1) % BONUS_FREQUENCIES.length;
         return;
       }
@@ -552,28 +572,39 @@ export class MainMenu {
     if (y >= layout.startButtonY - 6 && y < layout.startButtonY + 22) this.launchGame();
   }
 
-  private gameConfigLayout(): { gridX: number; gridY: number; colWidth: number; rowHeight: number; durationY: number; startButtonY: number } {
+  private gameConfigLayout(): { gridX: number; allY: number; gridY: number; colWidth: number; rowHeight: number; durationY: number; startButtonY: number } {
     const colWidth = Math.min(250, Math.floor((this.canvas.width - 20) / 2));
     const gridX = Math.floor((this.canvas.width - colWidth * 2) / 2);
-    const gridY = 52;
+    const allY = 50;
+    const gridY = 74;
     const rowHeight = 36;
     const durationY = gridY + CONFIG_ROWS * rowHeight + 8;
-    return { gridX, gridY, colWidth, rowHeight, durationY, startButtonY: durationY + 25 };
+    return { gridX, allY, gridY, colWidth, rowHeight, durationY, startButtonY: durationY + 25 };
   }
 
   private renderGameConfig(): void {
     const { ctx, assets } = this;
     const form = this.configForm;
     const layout = this.gameConfigLayout();
+    const shared = form.frequencies.every((value) => value === form.frequencies[0]);
+    const allText = `all bonuses: < ${shared ? BONUS_FREQUENCIES[form.frequencies[0]] : 'custom'} >`;
+    const allX = Math.round((this.canvas.width - allText.length * 8) / 2);
+    if (form.focus === CONFIG_ALL_FOCUS) writeFont(ctx, assets, '>', 1, allX - 16, layout.allY);
+    writeFont(ctx, assets, allText, 1, allX, layout.allY);
     for (let i = 0; i < BONUS_KINDS.length; i += 1) {
-      const x = layout.gridX + Math.floor(i / CONFIG_ROWS) * layout.colWidth;
+      // The right column mirrors the left one: its tiles sit on the outer
+      // edge with the value to their left, keeping the page symmetrical.
+      const rightColumn = Math.floor(i / CONFIG_ROWS) === 1;
+      const cellX = layout.gridX + (rightColumn ? layout.colWidth : 0);
       const y = layout.gridY + (i % CONFIG_ROWS) * layout.rowHeight;
-      if (form.focus === i) {
+      const iconX = rightColumn ? cellX + layout.colWidth - 30 : cellX;
+      const text = `< ${BONUS_FREQUENCIES[form.frequencies[i]]} >`;
+      if (form.focus === i + 1) {
         ctx.fillStyle = 'rgb(255, 255, 255)';
-        ctx.fillRect(x - 2, y - 2, 34, 34);
+        ctx.fillRect(iconX - 2, y - 2, 34, 34);
       }
-      assets.graphics.draw(ctx, BONUS_TILE_COLUMNS[BONUS_KINDS[i]], 19, x, y);
-      writeFont(ctx, assets, `< ${BONUS_FREQUENCIES[form.frequencies[i]]} >`, 1, x + 38, y + 11);
+      assets.graphics.draw(ctx, BONUS_TILE_COLUMNS[BONUS_KINDS[i]], 19, iconX, y);
+      writeFont(ctx, assets, text, 1, rightColumn ? iconX - text.length * 8 - 8 : iconX + 38, y + 11);
     }
     const durationText = `duration: < ${form.minutes} min >`;
     const durationX = Math.round((this.canvas.width - durationText.length * 8) / 2);

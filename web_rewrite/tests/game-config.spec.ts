@@ -34,7 +34,8 @@ test('create game opens the settings page and starts with the defaults', async (
 
 test('settings page changes bonus frequencies and game duration', async ({ page }) => {
   await openGameConfig(page);
-  await page.keyboard.press('ArrowRight'); // first bonus (acceleration): normal -> high
+  await page.keyboard.press('Tab'); // first bonus (acceleration)
+  await page.keyboard.press('ArrowRight'); // normal -> high
   await page.keyboard.press('Tab'); // second bonus (ap-bullets)
   await page.keyboard.press('ArrowLeft'); // normal -> minimum
   await page.keyboard.press('ArrowLeft'); // minimum -> no
@@ -46,6 +47,14 @@ test('settings page changes bonus frequencies and game duration', async ({ page 
   const params = new URL(page.url()).searchParams;
   expect(params.get('bonuses')).toBe('3022222222');
   expect(params.get('duration')).toBe('7');
+});
+
+test('all bonuses group setting updates every frequency at once', async ({ page }) => {
+  await openGameConfig(page);
+  await page.keyboard.press('ArrowRight'); // all bonuses: normal -> high
+  await page.keyboard.press('Enter');
+  await page.waitForURL(/play=1/);
+  expect(new URL(page.url()).searchParams.get('bonuses')).toBe('3333333333');
 });
 
 test('settings page escapes back to the level grid', async ({ page }) => {

@@ -24,7 +24,7 @@ test('menu is navigable by tapping items on a phone', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('level');
   await tapCanvas(page, 90, 110); // first level thumbnail (3-column centered grid)
   await expect.poll(() => page.evaluate(() => (window as MenuWindow).menu?.screen)).toBe('game-config');
-  await tapCanvas(page, 195, 270); // 'start' button below the defaults
+  await tapCanvas(page, 195, 292); // 'start' button below the defaults
   await page.waitForURL(/play=1/);
   const params = new URL(page.url()).searchParams;
   expect(params.get('mode')).toBe('dm');
