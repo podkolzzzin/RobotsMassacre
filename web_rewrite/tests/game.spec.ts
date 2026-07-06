@@ -733,6 +733,67 @@ test('holding attack after deploy does not fire accidental cannon shot', async (
   });
 });
 
+test('rapid re-tap right after deploy does not fire accidental cannon shot', async ({ page }) => {
+  await page.goto(playUrl('/?sound=off'));
+  await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: {
+        x: number;
+        y: number;
+        direction: number;
+        ammo: number;
+        inventory: Array<{ kind: string; activationKey: number; imageIndex: number; amount: number }>;
+        currentInventoryKey: number;
+      };
+      bullets: Map<string, unknown>;
+      level: { entities: Array<unknown> };
+    } }).game!;
+    game.localPlayer.x = 180;
+    game.localPlayer.y = 180;
+    game.localPlayer.direction = 2;
+    game.localPlayer.ammo = 75;
+    game.localPlayer.inventory = [
+      { kind: 'cannon', activationKey: 1, imageIndex: 9, amount: 1 },
+      { kind: 'turret', activationKey: 2, imageIndex: 7, amount: 1 },
+    ];
+    game.localPlayer.currentInventoryKey = 2;
+    game.bullets.clear();
+    game.level.entities = [];
+  });
+
+  // Deploying the last turret auto-selects the cannon; a habitual quick
+  // second tap of the fire key must not shoot.
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(60);
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(60);
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(60);
+  await page.keyboard.up('Space');
+  await page.waitForTimeout(400);
+
+  const state = await page.evaluate(() => {
+    const game = (window as Window & { game?: {
+      localPlayer: { ammo: number; currentInventoryKey: number };
+      bullets: Map<string, unknown>;
+      level: { entities: Array<{ kind?: string }> };
+    } }).game!;
+    return {
+      bullets: game.bullets.size,
+      ammo: game.localPlayer.ammo,
+      selected: game.localPlayer.currentInventoryKey,
+      turrets: game.level.entities.filter((entity) => entity.kind === 'turret').length,
+    };
+  });
+
+  expect(state).toEqual({
+    bullets: 0,
+    ammo: 75,
+    selected: 1,
+    turrets: 1,
+  });
+});
+
 test('blocked building placement keeps inventory and does not fire', async ({ page }) => {
   await page.goto(playUrl('/?sound=off'));
   await page.evaluate(() => {
