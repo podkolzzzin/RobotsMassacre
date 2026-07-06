@@ -547,7 +547,8 @@ export class Game {
     writeCentered(this.ctx, this.assets, modeLabels[this.mode] ?? this.mode, 1, 6, this.canvas.width);
     if (this.mode === 'ctf') {
       writeFont(this.ctx, this.assets, `red ${this.score.red}`, 1, 10, 6);
-      writeFont(this.ctx, this.assets, `blu ${this.score.blu}`, 1, this.canvas.width - 40, 6);
+      const bluText = `blu ${this.score.blu}`;
+      writeFont(this.ctx, this.assets, bluText, 1, this.canvas.width - bluText.length * 8 - 10, 6);
     }
     writeFont(this.ctx, this.assets, `${this.localStats.shots}`, 1, 10, 30);
   }
