@@ -2006,7 +2006,7 @@ test('water tiles animate after original skipped redraw cadence', async ({ page 
   }, initial!.frame)).toBe(true);
 });
 
-test('movement accepts simultaneous directional input', async ({ page }) => {
+test('simultaneous directional input moves only in the most recently pressed direction', async ({ page }) => {
   await page.goto(playUrl());
   const start = await page.evaluate(() => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
@@ -2025,8 +2025,10 @@ test('movement accepts simultaneous directional input', async ({ page }) => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
     return { x: game.localPlayer.x, y: game.localPlayer.y, direction: game.localPlayer.direction };
   });
+  // Diagonal movement is prohibited by game design: KeyW was pressed last, so
+  // it alone drives movement (Up) even though KeyD is still held.
   expect(end.direction).toBe(0);
-  expect(end.x).toBeGreaterThan(start.x);
+  expect(end.x).toBe(start.x);
   expect(end.y).toBeLessThan(start.y);
 });
 

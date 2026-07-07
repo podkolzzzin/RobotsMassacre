@@ -67,32 +67,13 @@ export class InputState {
     this.release(code);
   }
 
-  // Opposite keys held together resolve to the most recently pressed one, so
-  // strafing (press right before releasing left) never freezes an axis and
-  // diagonal movement keeps working while three keys are down. But holding
-  // both keys of both axes at once is a contradictory "every direction"
-  // input, not a strafe — disable movement entirely rather than pick one.
+  // Diagonal movement is prohibited by game design (sprites only face
+  // up/down/left/right), so only the most recently pressed movement key
+  // that is still held drives movement — never two axes at once. This is
+  // the same "latest press wins" tie-break already used for opposite keys,
+  // just applied across all movement keys instead of per-axis.
   movementVector(): { x: number; y: number } {
-    const xConflict = this.anyDown(['KeyA', 'ArrowLeft']) && this.anyDown(['KeyD', 'ArrowRight']);
-    const yConflict = this.anyDown(['KeyW', 'ArrowUp']) && this.anyDown(['KeyS', 'ArrowDown']);
-    if (xConflict && yConflict) return { x: 0, y: 0 };
-    return {
-      x: this.axisValue(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']),
-      y: this.axisValue(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']),
-    };
-  }
-
-  private anyDown(codes: string[]): boolean {
-    return codes.some((code) => this.down.has(code));
-  }
-
-  private axisValue(negative: string[], positive: string[]): number {
-    for (let i = this.movementOrder.length - 1; i >= 0; i -= 1) {
-      const code = this.movementOrder[i];
-      if (negative.includes(code)) return -1;
-      if (positive.includes(code)) return 1;
-    }
-    return 0;
+    return axisVectorForCode(this.latestMovementCode());
   }
 
   latestMovementCode(): string | undefined {
@@ -274,6 +255,14 @@ function inventoryDigit(code: string): number | undefined {
 
 function isMovementCode(code: string): boolean {
   return ['KeyA', 'KeyD', 'KeyW', 'KeyS', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(code);
+}
+
+function axisVectorForCode(code: string | undefined): { x: number; y: number } {
+  if (code === 'KeyA' || code === 'ArrowLeft') return { x: -1, y: 0 };
+  if (code === 'KeyD' || code === 'ArrowRight') return { x: 1, y: 0 };
+  if (code === 'KeyW' || code === 'ArrowUp') return { x: 0, y: -1 };
+  if (code === 'KeyS' || code === 'ArrowDown') return { x: 0, y: 1 };
+  return { x: 0, y: 0 };
 }
 
 function controlButton(label: string, code: string, input: InputState, className: string, repeatMs?: number): HTMLButtonElement {
