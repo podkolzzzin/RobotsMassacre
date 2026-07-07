@@ -30,6 +30,7 @@ export class Multiplayer {
   private readonly peers = new Map<string, RTCPeerConnection>();
   private readonly channels = new Map<string, RTCDataChannel>();
   private transport?: SignalTransport;
+  onChat?: (name: string, text: string) => void;
 
   constructor(private readonly game: Game) {}
 
@@ -53,6 +54,13 @@ export class Multiplayer {
 
   broadcast(): void {
     const payload = JSON.stringify({ type: 'state', state: this.game.networkState() });
+    for (const channel of this.channels.values()) {
+      if (channel.readyState === 'open') channel.send(payload);
+    }
+  }
+
+  sendChat(name: string, text: string): void {
+    const payload = JSON.stringify({ type: 'chat', name, text });
     for (const channel of this.channels.values()) {
       if (channel.readyState === 'open') channel.send(payload);
     }
@@ -123,8 +131,11 @@ export class Multiplayer {
   private bindChannel(remoteId: string, channel: RTCDataChannel): void {
     this.channels.set(remoteId, channel);
     channel.onmessage = (event) => {
-      const message = JSON.parse(event.data) as { type: 'state'; state: NetworkGameState };
+      const message = JSON.parse(event.data) as
+        | { type: 'state'; state: NetworkGameState }
+        | { type: 'chat'; name: string; text: string };
       if (message.type === 'state') this.game.applyNetworkState(message.state);
+      else if (message.type === 'chat') this.onChat?.(message.name, message.text);
     };
   }
 
