@@ -79,8 +79,7 @@ test('typing movement keys while chatting does not drive the tank', async ({ pag
   expect(Math.abs(after.y - before.y)).toBeLessThan(1);
 });
 
-test('chat messages are delivered to the other client over WebRTC', async ({ browser }) => {
-  const context = await browser.newContext();
+test('chat messages are delivered to the other client over WebRTC', async ({ browser }) => {  const context = await browser.newContext();
   const room = `pw-chat-${Date.now()}`;
   const a = await context.newPage();
   const b = await context.newPage();
@@ -111,4 +110,59 @@ test('chat messages are delivered to the other client over WebRTC', async ({ bro
   await expect(b.locator('.chat-line .chat-name')).toHaveText('alpha');
 
   await context.close();
+});
+
+// Injects a fake Web Speech API before the page scripts run so the mic button
+// appears and dictation resolves to a fixed transcript.
+async function installSpeechMock(page: Page, transcript: string): Promise<void> {
+  await page.addInitScript((text) => {
+    class FakeRecognition {
+      lang = '';
+      continuous = false;
+      interimResults = false;
+      maxAlternatives = 1;
+      onresult: ((event: unknown) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
+      onend: (() => void) | null = null;
+      start(): void {
+        setTimeout(() => {
+          this.onresult?.({
+            resultIndex: 0,
+            results: { length: 1, 0: { length: 1, isFinal: true, 0: { transcript: text } } },
+          });
+          this.onend?.();
+        }, 30);
+      }
+      stop(): void {
+        this.onend?.();
+      }
+      abort(): void {}
+    }
+    (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition = FakeRecognition;
+  }, transcript);
+}
+
+test('touch layouts expose a mic button that sends the transcribed message', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installSpeechMock(page, 'voice message works');
+  await startGame(page);
+
+  const mic = page.locator('.chat-mic-button');
+  await expect(mic).toBeVisible();
+
+  await mic.click();
+  await expect(page.locator('.chat-line .chat-text')).toHaveText('voice message works');
+  await expect(page.locator('.chat-line .chat-name')).toHaveText('Tanker');
+  // The recording indicator clears once dictation finishes.
+  await expect(mic).not.toHaveClass(/is-recording/);
+});
+
+test('the mic button stays hidden when speech recognition is unavailable', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).SpeechRecognition;
+    delete (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+  });
+  await startGame(page);
+  await expect(page.locator('.chat-mic-button')).toHaveCount(0);
 });

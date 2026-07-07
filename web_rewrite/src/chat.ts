@@ -14,6 +14,49 @@ export interface ChatMessage {
   at: number;
 }
 
+// Minimal Web Speech API typings: the DOM lib does not ship them and browsers
+// expose the constructor under either `SpeechRecognition` or the webkit prefix.
+interface SpeechRecognitionAlternativeLike {
+  transcript: string;
+}
+interface SpeechRecognitionResultLike {
+  readonly length: number;
+  [index: number]: SpeechRecognitionAlternativeLike;
+  isFinal: boolean;
+}
+interface SpeechRecognitionResultListLike {
+  readonly length: number;
+  [index: number]: SpeechRecognitionResultLike;
+}
+interface SpeechRecognitionEventLike extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultListLike;
+}
+interface SpeechRecognitionErrorEventLike extends Event {
+  error: string;
+}
+interface SpeechRecognitionLike extends EventTarget {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+}
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+function getSpeechRecognition(): SpeechRecognitionConstructor | undefined {
+  const scope = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return scope.SpeechRecognition ?? scope.webkitSpeechRecognition;
+}
+
 // DOM-based chat overlay: a real <input> is used so mobile keyboards (and their
 // built-in dictation and emoji) work without extra models, while messages are
 // rendered as HTML so the nickname can be bold and emoji render natively.
@@ -29,11 +72,16 @@ export class Chat {
   private readonly form: HTMLDivElement;
   private readonly emojiRow: HTMLDivElement;
   private readonly input: HTMLInputElement;
+  // Optional voice-dictation button, only created when the browser exposes the
+  // Web Speech API. It is shown near the fire button on touch layouts.
+  private readonly micButton?: HTMLButtonElement;
+  private recognition?: SpeechRecognitionLike;
+  private recording = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly canOpen: () => boolean,
-    root: HTMLElement = document.body,
+    private readonly root: HTMLElement = document.body,
   ) {
     this.layer = document.createElement('div');
     this.layer.className = 'chat-layer';
@@ -101,6 +149,8 @@ export class Chat {
     this.layer.append(this.log, this.form);
     root.append(this.layer);
 
+    this.micButton = this.buildMicButton();
+
     window.addEventListener('keydown', (event) => {
       if (this.open || event.code !== 'KeyT') return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -108,6 +158,78 @@ export class Chat {
       event.preventDefault();
       this.openInput();
     });
+  }
+
+  // Creates the microphone button used for voice dictation on touch screens.
+  // Returns undefined (leaving the button hidden) when the Web Speech API is
+  // unavailable so the UI never offers dictation it cannot fulfil.
+  private buildMicButton(): HTMLButtonElement | undefined {
+    if (!getSpeechRecognition()) return undefined;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'touch-button chat-mic-button';
+    button.textContent = '🎤';
+    button.title = 'Voice message';
+    button.setAttribute('aria-label', 'Record a voice message');
+    button.addEventListener('pointerdown', (event) => event.preventDefault());
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      this.toggleDictation();
+    });
+    this.root.append(button);
+    // Reveal the button only where dictation is supported; CSS still gates it to
+    // touch layouts and in-game mode.
+    document.body.classList.add('speech-supported');
+    return button;
+  }
+
+  private toggleDictation(): void {
+    if (this.recording) {
+      this.recognition?.stop();
+      return;
+    }
+    this.startDictation();
+  }
+
+  private startDictation(): void {
+    if (this.recording || !this.canOpen()) return;
+    const Recognition = getSpeechRecognition();
+    if (!Recognition) return;
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      let text = '';
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        if (result.isFinal && result.length > 0) text += result[0].transcript;
+      }
+      const trimmed = text.trim();
+      if (trimmed) this.onSubmit?.(trimmed);
+    };
+    recognition.onerror = () => this.stopRecording();
+    recognition.onend = () => this.stopRecording();
+    this.recognition = recognition;
+    this.recording = true;
+    this.micButton?.classList.add('is-recording');
+    this.micButton?.setAttribute('aria-label', 'Stop recording');
+    try {
+      // start() triggers the microphone permission prompt when none is granted.
+      recognition.start();
+    } catch {
+      // Calling start() twice throws; treat it as a no-op and reset state.
+      this.stopRecording();
+    }
+  }
+
+  private stopRecording(): void {
+    if (!this.recording) return;
+    this.recording = false;
+    this.recognition = undefined;
+    this.micButton?.classList.remove('is-recording');
+    this.micButton?.setAttribute('aria-label', 'Record a voice message');
   }
 
   private openInput(): void {

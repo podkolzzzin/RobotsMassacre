@@ -135,6 +135,38 @@ body[data-input-mode='game'] .fire-button.touch-button {
   display: block;
 }
 
+/* Voice-dictation button sits just left of the fire button. It only appears on
+   touch layouts while in-game and when the browser supports speech recognition
+   (chat.ts adds the `speech-supported` class). */
+.chat-mic-button.touch-button {
+  position: fixed;
+  right: calc(20px + clamp(84px, 24vw, 112px) + 16px + env(safe-area-inset-right));
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  width: clamp(52px, 15vw, 68px);
+  height: clamp(52px, 15vw, 68px);
+  border-radius: 50%;
+  font-size: clamp(20px, 6vw, 28px);
+  /* Sit above the joystick zone (z-index 2) so taps land on the mic, not movement. */
+  z-index: 4;
+  display: none;
+}
+
+.chat-mic-button.touch-button.is-recording {
+  background: rgba(200, 48, 48, 0.85);
+  border-color: #ff6b6b;
+  animation: chat-mic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes chat-mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 80, 80, 0);
+  }
+}
+
 .esc-button.touch-button {
   position: fixed;
   top: calc(12px + env(safe-area-inset-top));
@@ -268,6 +300,10 @@ body.touch-holding-flag .drop-button.touch-button {
   body[data-input-mode='editor'] #game {
     height: calc(100vh - var(--controls-reserve));
     height: calc(100dvh - var(--controls-reserve));
+  }
+
+  body.speech-supported[data-input-mode='game'] .chat-mic-button.touch-button {
+    display: block;
   }
 }
 
