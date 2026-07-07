@@ -79,7 +79,8 @@ test('typing movement keys while chatting does not drive the tank', async ({ pag
   expect(Math.abs(after.y - before.y)).toBeLessThan(1);
 });
 
-test('chat messages are delivered to the other client over WebRTC', async ({ browser }) => {  const context = await browser.newContext();
+test('chat messages are delivered to the other client over WebRTC', async ({ browser }) => {
+  const context = await browser.newContext();
   const room = `pw-chat-${Date.now()}`;
   const a = await context.newPage();
   const b = await context.newPage();
