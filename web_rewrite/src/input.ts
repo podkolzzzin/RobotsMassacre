@@ -69,12 +69,21 @@ export class InputState {
 
   // Opposite keys held together resolve to the most recently pressed one, so
   // strafing (press right before releasing left) never freezes an axis and
-  // diagonal movement keeps working while three or four keys are down.
+  // diagonal movement keeps working while three keys are down. But holding
+  // both keys of both axes at once is a contradictory "every direction"
+  // input, not a strafe — disable movement entirely rather than pick one.
   movementVector(): { x: number; y: number } {
+    const xConflict = this.anyDown(['KeyA', 'ArrowLeft']) && this.anyDown(['KeyD', 'ArrowRight']);
+    const yConflict = this.anyDown(['KeyW', 'ArrowUp']) && this.anyDown(['KeyS', 'ArrowDown']);
+    if (xConflict && yConflict) return { x: 0, y: 0 };
     return {
       x: this.axisValue(['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']),
       y: this.axisValue(['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown']),
     };
+  }
+
+  private anyDown(codes: string[]): boolean {
+    return codes.some((code) => this.down.has(code));
   }
 
   private axisValue(negative: string[], positive: string[]): number {

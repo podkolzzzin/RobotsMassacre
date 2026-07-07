@@ -76,3 +76,23 @@ test('opposite keys alone move toward the most recent press', async ({ page }) =
   await page.keyboard.up('KeyA');
   expect(final.x - back.x).toBeLessThan(-3);
 });
+
+test('holding all four directional keys disables diagonal movement', async ({ page }) => {
+  await startGame(page);
+  await page.keyboard.down('KeyW');
+  await page.keyboard.down('KeyA');
+  await page.keyboard.down('KeyS');
+  await page.keyboard.down('KeyD');
+  // Capture the baseline only once all four are confirmed down, so the brief
+  // per-key press sequence (which passes through partial, non-conflicting
+  // states) isn't mistaken for movement during the steady-state hold.
+  const before = await playerPosition(page);
+  await page.waitForTimeout(700);
+  const after = await playerPosition(page);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.up('KeyA');
+  await page.keyboard.up('KeyS');
+  await page.keyboard.up('KeyD');
+  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+});
