@@ -429,7 +429,7 @@ export class MainMenu {
       return;
     }
 
-    this.game.localPlayer.team = TEAM_ITEMS[this.selected];
+    this.game.selectTeam(TEAM_ITEMS[this.selected]);
     this.active = false;
   }
 

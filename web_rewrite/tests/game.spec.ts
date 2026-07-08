@@ -1862,6 +1862,55 @@ test('ctf mode shows original team selector before play', async ({ page }) => {
   })).toEqual({ active: false, team: 'blu' });
 });
 
+type SpawnTestWindow = Window & {
+  game?: {
+    localPlayer: { x: number; y: number; team: string };
+    level: { spawners: Array<{ x: number; y: number; kind: string }> };
+  };
+  menu?: { active: boolean; screen: string };
+};
+
+function spawnPlacement(): { team: string; onOwn: boolean; onEnemy: boolean } {
+  const game = (window as SpawnTestWindow).game!;
+  const player = game.localPlayer;
+  const ownKind = player.team === 'red' ? 'spawner-red' : 'spawner-blu';
+  const own = game.level.spawners.filter((spawner) => spawner.kind === ownKind);
+  const enemy = game.level.spawners.filter((spawner) => spawner.kind !== ownKind);
+  return {
+    team: player.team,
+    onOwn: own.some((spawner) => spawner.x === player.x && spawner.y === player.y),
+    onEnemy: enemy.some((spawner) => Math.abs(spawner.x - player.x) < 32 && Math.abs(spawner.y - player.y) < 32),
+  };
+}
+
+test('selecting a team respawns the player on their own team spawner', async ({ page }) => {
+  await page.goto(playUrl('/?mode=ctf&level=/levels/ctf/struggel.rmm&sound=off'));
+  await expect.poll(async () => page.evaluate(() => {
+    const menu = (window as SpawnTestWindow).menu;
+    return menu?.screen;
+  })).toBe('team');
+
+  // Pick the team opposite to the first spawner so the constructor placement
+  // at spawners[0] cannot accidentally satisfy the assertion.
+  const firstSpawnerKind = await page.evaluate(() => (window as SpawnTestWindow).game!.level.spawners[0].kind);
+  if (firstSpawnerKind === 'spawner-red') await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+
+  const placement = await page.evaluate(spawnPlacement);
+  expect(placement.team).toBe(firstSpawnerKind === 'spawner-red' ? 'blu' : 'red');
+  expect(placement.onEnemy).toBe(false);
+  expect(placement.onOwn).toBe(true);
+});
+
+test('team from url query places the player on their own team spawner', async ({ page }) => {
+  for (const team of ['red', 'blu'] as const) {
+    await page.goto(playUrl(`/?mode=ctf&team=${team}&level=/levels/ctf/struggel.rmm&sound=off`));
+    await expect.poll(async () => page.evaluate(() => (window as SpawnTestWindow).game?.localPlayer.team)).toBe(team);
+    const placement = await page.evaluate(spawnPlacement);
+    expect(placement, `team ${team}`).toEqual({ team, onOwn: true, onEnemy: false });
+  }
+});
+
 test('escape opens original pause menu and can change team', async ({ page }) => {
   await page.goto(playUrl('/?mode=ctf&team=red&level=/levels/ctf/struggel.rmm&sound=off'));
   const beforePause = await page.evaluate(() => {
