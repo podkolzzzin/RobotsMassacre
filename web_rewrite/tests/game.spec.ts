@@ -1862,6 +1862,55 @@ test('ctf mode shows original team selector before play', async ({ page }) => {
   })).toEqual({ active: false, team: 'blu' });
 });
 
+type SpawnTestWindow = Window & {
+  game?: {
+    localPlayer: { x: number; y: number; team: string };
+    level: { spawners: Array<{ x: number; y: number; kind: string }> };
+  };
+  menu?: { active: boolean; screen: string };
+};
+
+function spawnPlacement(): { team: string; onOwn: boolean; onEnemy: boolean } {
+  const game = (window as SpawnTestWindow).game!;
+  const player = game.localPlayer;
+  const ownKind = player.team === 'red' ? 'spawner-red' : 'spawner-blu';
+  const own = game.level.spawners.filter((spawner) => spawner.kind === ownKind);
+  const enemy = game.level.spawners.filter((spawner) => spawner.kind !== ownKind);
+  return {
+    team: player.team,
+    onOwn: own.some((spawner) => spawner.x === player.x && spawner.y === player.y),
+    onEnemy: enemy.some((spawner) => Math.abs(spawner.x - player.x) < 32 && Math.abs(spawner.y - player.y) < 32),
+  };
+}
+
+test('selecting a team respawns the player on their own team spawner', async ({ page }) => {
+  await page.goto(playUrl('/?mode=ctf&level=/levels/ctf/struggel.rmm&sound=off'));
+  await expect.poll(async () => page.evaluate(() => {
+    const menu = (window as SpawnTestWindow).menu;
+    return menu?.screen;
+  })).toBe('team');
+
+  // Pick the team opposite to the first spawner so the constructor placement
+  // at spawners[0] cannot accidentally satisfy the assertion.
+  const firstSpawnerKind = await page.evaluate(() => (window as SpawnTestWindow).game!.level.spawners[0].kind);
+  if (firstSpawnerKind === 'spawner-red') await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+
+  const placement = await page.evaluate(spawnPlacement);
+  expect(placement.team).toBe(firstSpawnerKind === 'spawner-red' ? 'blu' : 'red');
+  expect(placement.onEnemy).toBe(false);
+  expect(placement.onOwn).toBe(true);
+});
+
+test('team from url query places the player on their own team spawner', async ({ page }) => {
+  for (const team of ['red', 'blu'] as const) {
+    await page.goto(playUrl(`/?mode=ctf&team=${team}&level=/levels/ctf/struggel.rmm&sound=off`));
+    await expect.poll(async () => page.evaluate(() => (window as SpawnTestWindow).game?.localPlayer.team)).toBe(team);
+    const placement = await page.evaluate(spawnPlacement);
+    expect(placement, `team ${team}`).toEqual({ team, onOwn: true, onEnemy: false });
+  }
+});
+
 test('escape opens original pause menu and can change team', async ({ page }) => {
   await page.goto(playUrl('/?mode=ctf&team=red&level=/levels/ctf/struggel.rmm&sound=off'));
   const beforePause = await page.evaluate(() => {
@@ -2006,7 +2055,7 @@ test('water tiles animate after original skipped redraw cadence', async ({ page 
   }, initial!.frame)).toBe(true);
 });
 
-test('movement accepts simultaneous directional input', async ({ page }) => {
+test('simultaneous directional input moves only in the most recently pressed direction', async ({ page }) => {
   await page.goto(playUrl());
   const start = await page.evaluate(() => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
@@ -2025,8 +2074,10 @@ test('movement accepts simultaneous directional input', async ({ page }) => {
     const game = (window as Window & { game?: { localPlayer: { x: number; y: number; direction: number } } }).game!;
     return { x: game.localPlayer.x, y: game.localPlayer.y, direction: game.localPlayer.direction };
   });
+  // Diagonal movement is prohibited by game design: KeyW was pressed last, so
+  // it alone drives movement (Up) even though KeyD is still held.
   expect(end.direction).toBe(0);
-  expect(end.x).toBeGreaterThan(start.x);
+  expect(end.x).toBe(start.x);
   expect(end.y).toBeLessThan(start.y);
 });
 

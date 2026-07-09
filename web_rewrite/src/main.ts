@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const game = new Game(canvas, ctx, level, assets, input, sounds, mode, gameConfigFromParams(params));
   if (settings.name) game.localPlayer.name = settings.name;
   const team = params.get('team');
-  if (team === 'red' || team === 'blu') game.localPlayer.team = team;
+  if (team === 'red' || team === 'blu') game.selectTeam(team);
 
   const playing = params.get('play') === '1';
   const sessionStart = performance.now();

@@ -22,36 +22,47 @@ async function playerPosition(page: import('@playwright/test').Page): Promise<{ 
   });
 }
 
-test('holding two perpendicular keys moves the player diagonally', async ({ page }) => {
+test('holding two perpendicular keys moves only in the most recently pressed direction', async ({ page }) => {
   await startGame(page);
-  const before = await playerPosition(page);
   await page.keyboard.down('KeyS');
   await page.keyboard.down('KeyD');
+  const before = await playerPosition(page);
   await page.waitForTimeout(700);
+  const after = await playerPosition(page);
   await page.keyboard.up('KeyS');
   await page.keyboard.up('KeyD');
-  const after = await playerPosition(page);
-  expect(Math.abs(after.x - before.x)).toBeGreaterThan(3);
-  expect(Math.abs(after.y - before.y)).toBeGreaterThan(3);
+  expect(after.x - before.x).toBeGreaterThan(3); // moves right (latest press wins)
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1); // never moves down at the same time
 });
 
-test('diagonal movement continues when both left and right are held', async ({ page }) => {
+test('holding left then up never moves diagonally', async ({ page }) => {
   await startGame(page);
-  // Move diagonally down-left, then press right without releasing left:
-  // the most recently pressed horizontal key should win, keeping the
-  // player on a diagonal course instead of freezing the horizontal axis.
-  await page.keyboard.down('KeyS');
   await page.keyboard.down('KeyA');
-  await page.waitForTimeout(300);
-  await page.keyboard.down('KeyD');
+  await page.keyboard.down('KeyW');
   const before = await playerPosition(page);
   await page.waitForTimeout(700);
   const after = await playerPosition(page);
-  await page.keyboard.up('KeyS');
+  await page.keyboard.up('KeyW');
   await page.keyboard.up('KeyA');
-  await page.keyboard.up('KeyD');
-  expect(after.x - before.x).toBeGreaterThan(3); // moving right (latest press wins)
-  expect(after.y - before.y).toBeGreaterThan(3); // still moving down
+  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+  expect(after.y - before.y).toBeLessThan(-3);
+});
+
+test('pressing a third perpendicular key overrides the current direction, not blends with it', async ({ page }) => {
+  await startGame(page);
+  // Move down, then press left without releasing down: diagonal movement is
+  // prohibited by game design, so the latest press should fully take over
+  // the single active direction rather than adding a second axis.
+  await page.keyboard.down('KeyS');
+  await page.waitForTimeout(300);
+  await page.keyboard.down('KeyA');
+  const before = await playerPosition(page);
+  await page.waitForTimeout(700);
+  const after = await playerPosition(page);
+  await page.keyboard.up('KeyA');
+  await page.keyboard.up('KeyS');
+  expect(after.x - before.x).toBeLessThan(-3); // moving left (latest press wins)
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1); // not also moving down
 });
 
 test('opposite keys alone move toward the most recent press', async ({ page }) => {
@@ -77,15 +88,15 @@ test('opposite keys alone move toward the most recent press', async ({ page }) =
   expect(final.x - back.x).toBeLessThan(-3);
 });
 
-test('holding all four directional keys disables diagonal movement', async ({ page }) => {
+test('holding all four directional keys still moves in only one direction', async ({ page }) => {
   await startGame(page);
   await page.keyboard.down('KeyW');
   await page.keyboard.down('KeyA');
   await page.keyboard.down('KeyS');
   await page.keyboard.down('KeyD');
   // Capture the baseline only once all four are confirmed down, so the brief
-  // per-key press sequence (which passes through partial, non-conflicting
-  // states) isn't mistaken for movement during the steady-state hold.
+  // per-key press sequence (which passes through partial states) isn't
+  // mistaken for movement during the steady-state hold.
   const before = await playerPosition(page);
   await page.waitForTimeout(700);
   const after = await playerPosition(page);
@@ -93,6 +104,6 @@ test('holding all four directional keys disables diagonal movement', async ({ pa
   await page.keyboard.up('KeyA');
   await page.keyboard.up('KeyS');
   await page.keyboard.up('KeyD');
-  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
-  expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+  expect(after.x - before.x).toBeGreaterThan(3); // moves right (KeyD pressed last)
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1); // never diagonally
 });

@@ -921,6 +921,23 @@ export class Game {
     local.y = spawn.y;
   }
 
+  // The original client respawns right after a team is chosen; without the
+  // relocation the player keeps the pre-selection position at spawners[0],
+  // which may belong to the other team.
+  selectTeam(team: Team): void {
+    const player = this.localPlayer;
+    player.team = team;
+    if (player.hp <= 0) return; // the pending respawn picks the new team's spawner
+    const spawn = this.spawnForPlayer(player);
+    if (spawn) {
+      player.x = spawn.x;
+      player.y = spawn.y;
+    }
+    this.movedSinceSpawn = false;
+    this.spawnSettleUntil = performance.now() + SPAWN_SETTLE_MS;
+    this.centerCamera(player);
+  }
+
   private spawnForPlayer(player: PlayerState): { x: number; y: number } | undefined {
     const teamSpawners = player.team === 'none' ? [] : this.level.spawners.filter((spawner) => flagTeam(spawner) === player.team);
     const candidates = teamSpawners.length > 0 ? teamSpawners : this.level.spawners;
